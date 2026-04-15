@@ -1,6 +1,6 @@
 # Packages
 
-All packages target **.NET 10.0** and are published to [NuGet.org](https://www.nuget.org/profiles/nicosga).
+All packages target **.NET 10.0** and are published to [NuGet.org](https://www.nuget.org/profiles/cocoar-dev).
 
 ## Core
 

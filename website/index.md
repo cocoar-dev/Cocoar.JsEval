@@ -14,7 +14,7 @@ hero:
       link: /reference/api
     - theme: alt
       text: GitHub
-      link: https://github.com/nicosga/cocoar.js-eval
+      link: https://github.com/cocoar-dev/Cocoar.JsEval
 
 features:
   - icon: |-

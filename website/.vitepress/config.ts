@@ -89,7 +89,7 @@ export default withMermaid(
       },
 
       socialLinks: [
-        { icon: 'github', link: 'https://github.com/nicosga/cocoar.js-eval' },
+        { icon: 'github', link: 'https://github.com/cocoar-dev/Cocoar.JsEval' },
       ],
 
       search: {

@@ -25,8 +25,8 @@
     <Copyright>Copyright © COCOAR $([System.DateTime]::Now.Year)</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageProjectUrl>https://github.com/nicosga/cocoar.js-eval</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/nicosga/cocoar.js-eval</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/cocoar-dev/Cocoar.JsEval</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/cocoar-dev/Cocoar.JsEval</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>scripting;javascript;typescript;jint;dotnet;embedding</PackageTags>
