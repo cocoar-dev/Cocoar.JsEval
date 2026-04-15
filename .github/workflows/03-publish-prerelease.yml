@@ -1,4 +1,4 @@
-name: NuGet Prerelease
+name: NuGet Prerelease 
 
 on:
   workflow_dispatch:
