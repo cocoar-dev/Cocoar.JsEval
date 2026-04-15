@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Module.AngleSharp</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Module.AngleSharp</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>Cocoar.JsEval.Module.AngleSharp</PackageId>
+    <Description>HTML parsing module for JsEval scripting engines using AngleSharp</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AngleSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

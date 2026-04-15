@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Module.Template</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Module.Template</RootNamespace>
+    <PackageId>Cocoar.JsEval.Module.Template</PackageId>
+    <Description>Template rendering module for JsEval scripting engines using Scriban</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Scriban" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Engine</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Engine</RootNamespace>
+    <PackageId>Cocoar.JsEval.Engine</PackageId>
+    <Description>JavaScript engine for Cocoar.JsEval, built on Jint with fetch() and async/await support</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jint" />
+    <PackageReference Include="Nito.AsyncEx.Tasks" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

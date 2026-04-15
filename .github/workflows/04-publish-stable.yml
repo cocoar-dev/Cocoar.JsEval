@@ -1,0 +1,192 @@
+name: Release - Stable
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.id }}
+  cancel-in-progress: true
+
+jobs:
+  validate-version:
+    name: Validate & Extract Version
+    if: github.event.release.target_commitish == 'main'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+    steps:
+      - name: Extract and validate release version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "Release tag: $TAG"
+
+          if [[ "$TAG" =~ ^v[0-9] ]]; then
+            VERSION="${TAG#v}"
+          else
+            echo "::error ::Tag must start with 'v' followed by version number (e.g., v1.2.3)"
+            exit 1
+          fi
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error ::Invalid release version format. Expected X.Y.Z (e.g., 1.2.3), got: $VERSION"
+            exit 1
+          fi
+
+          echo "Using release version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+  test-multiplatform:
+    name: Test on ${{ matrix.os }}
+    needs: validate-version
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+        working-directory: ./src
+
+      - name: Build solution
+        run: dotnet build -c Release --no-restore
+        working-directory: ./src
+
+      - name: Run tests
+        run: dotnet test -c Release --no-build --no-restore --verbosity normal
+        working-directory: ./src
+
+  publish:
+    name: Pack & Publish to NuGet
+    needs: [validate-version, test-multiplatform]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+        working-directory: ./src
+
+      - name: Build solution (stable)
+        run: dotnet build -c Release --no-restore -p:Version=${{ needs.validate-version.outputs.version }}
+        working-directory: ./src
+
+      - name: Pack NuGet packages (stable)
+        run: dotnet pack -c Release --no-restore -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg -o ../artifacts -p:Version=${{ needs.validate-version.outputs.version }}
+        working-directory: ./src
+
+      - name: Ensure packages exist
+        run: |
+          shopt -s nullglob
+          files=(artifacts/*.nupkg artifacts/*.snupkg)
+          (( ${#files[@]} )) || { echo "::error ::No packages found in artifacts/"; exit 1; }
+
+      - name: Upload artifacts (audit)
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ needs.validate-version.outputs.version }}
+          path: artifacts
+          retention-days: 7
+
+      - name: Push to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          shopt -s nullglob
+          for p in artifacts/*.nupkg artifacts/*.snupkg; do
+            dotnet nuget push "$p" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
+          done
+
+  deploy-docs:
+    name: Deploy Documentation
+    needs: [validate-version, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Install dependencies
+        working-directory: website
+        run: pnpm install --frozen-lockfile
+
+      - name: Build VitePress
+        working-directory: website
+        run: pnpm vitepress build
+
+      - name: Extract docs version
+        id: docs-version
+        env:
+          VERSION: ${{ needs.validate-version.outputs.version }}
+        run: |
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          echo "value=v${MAJOR}.${MINOR}" >> $GITHUB_OUTPUT
+
+      - name: Package
+        run: cd website/.vitepress/dist && zip -r $GITHUB_WORKSPACE/docs.zip .
+
+      - name: Upload to Shelf
+        env:
+          KEY: ${{ secrets.SHELF_API_KEY }}
+          URL: ${{ secrets.SHELF_BASE_URL }}
+          VER: ${{ steps.docs-version.outputs.value }}
+        run: |
+          echo "Deploying cocoar-js-eval docs $VER to $URL"
+          curl -f -X POST \
+            -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/zip" \
+            --data-binary @$GITHUB_WORKSPACE/docs.zip \
+            "${URL}/_api/products/cocoar-js-eval/versions/${VER}"
+
+      - name: Docs deployment summary
+        run: |
+          echo "### Documentation Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Product:** cocoar-js-eval" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.docs-version.outputs.value }}" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ secrets.SHELF_BASE_URL }}/cocoar-js-eval/" >> $GITHUB_STEP_SUMMARY

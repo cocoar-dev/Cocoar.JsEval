@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval</AssemblyName>
+    <RootNamespace>Cocoar.JsEval</RootNamespace>
+    <PackageId>Cocoar.JsEval</PackageId>
+    <Description>JavaScript/TypeScript execution library for .NET, built on Jint</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Cocoar.Reflectensions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+</Project>

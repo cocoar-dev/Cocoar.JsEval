@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.TypeScript</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.TypeScript</RootNamespace>
+    <PackageId>Cocoar.JsEval.TypeScript</PackageId>
+    <Description>TypeScript 6.0 transpiler for Cocoar.JsEval using embedded TypeScript compiler</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="typescript.min.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="typescript.min.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jint" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

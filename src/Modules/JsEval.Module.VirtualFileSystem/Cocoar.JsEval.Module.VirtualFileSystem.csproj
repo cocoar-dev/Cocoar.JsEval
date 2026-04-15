@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Module.VirtualFileSystem</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Module.VirtualFileSystem</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>Cocoar.JsEval.Module.VirtualFileSystem</PackageId>
+    <Description>Virtual filesystem module for JsEval scripting engines using Zio</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Zio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

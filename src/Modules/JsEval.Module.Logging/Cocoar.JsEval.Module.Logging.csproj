@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Module.Logging</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Module.Logging</RootNamespace>
+    <PackageId>Cocoar.JsEval.Module.Logging</PackageId>
+    <Description>Logging module for JsEval scripting engines using Microsoft.Extensions.Logging</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

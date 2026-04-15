@@ -1,0 +1,31 @@
+mode: ContinuousDeployment
+
+branches:
+  main:
+    regex: ^main$
+    label: beta
+    is-main-branch: true
+
+  release:
+    regex: ^release[/-]
+    label: rc
+
+  feature:
+    regex: ^(feature|bugfix|fix)[/-](?<BranchName>.+)
+    label: '{BranchName}'
+
+  hotfix:
+    regex: ^hotfix[/-]
+    label: hotfix
+
+  pull-request:
+    label: pr
+
+  other:
+    regex: .*
+    label: alpha
+
+tag-prefix: 'v'
+commit-message-incrementing: Enabled
+ignore:
+  sha: []

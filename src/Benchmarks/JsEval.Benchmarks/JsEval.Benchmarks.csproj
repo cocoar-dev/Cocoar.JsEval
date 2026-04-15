@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\JsEval\Cocoar.JsEval.csproj" />
+    <ProjectReference Include="..\..\JsEval.Engine\Cocoar.JsEval.Engine.csproj" />
+    <ProjectReference Include="..\..\JsEval.TypeScript\Cocoar.JsEval.TypeScript.csproj" />
+    <ProjectReference Include="..\..\Modules\JsEval.Module.Common\Cocoar.JsEval.Module.Common.csproj" />
+    <ProjectReference Include="..\..\Modules\JsEval.Module.Http\Cocoar.JsEval.Module.Http.csproj" />
+  </ItemGroup>
+
+</Project>

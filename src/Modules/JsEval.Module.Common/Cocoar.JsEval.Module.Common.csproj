@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Module.Common</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Module.Common</RootNamespace>
+    <PackageId>Cocoar.JsEval.Module.Common</PackageId>
+    <Description>Common utility module for JsEval scripting engines (GUID, Sleep, Random)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

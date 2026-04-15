@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Module.Http</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Module.Http</RootNamespace>
+    <PackageId>Cocoar.JsEval.Module.Http</PackageId>
+    <Description>HTTP client module for JsEval scripting engines</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Cocoar.Reflectensions.ExpandableObject" />
+    <PackageReference Include="DynamicExpresso.Core" />
+    <PackageReference Include="Nito.AsyncEx.Tasks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

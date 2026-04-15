@@ -1,0 +1,26 @@
+<Solution>
+  <Folder Name="/Core/">
+    <Project Path="JsEval/Cocoar.JsEval.csproj" />
+    <Project Path="JsEval.Engine/Cocoar.JsEval.Engine.csproj" />
+    <Project Path="JsEval.TypeScript/Cocoar.JsEval.TypeScript.csproj" />
+    <Project Path="JsEval.TsDefinition/Cocoar.JsEval.TsDefinition.csproj" />
+  </Folder>
+  <Folder Name="/Modules/">
+    <Project Path="Modules/JsEval.Module.AngleSharp/Cocoar.JsEval.Module.AngleSharp.csproj" />
+    <Project Path="Modules/JsEval.Module.Common/Cocoar.JsEval.Module.Common.csproj" />
+    <Project Path="Modules/JsEval.Module.Database/Cocoar.JsEval.Module.Database.csproj" />
+    <Project Path="Modules/JsEval.Module.Http/Cocoar.JsEval.Module.Http.csproj" />
+    <Project Path="Modules/JsEval.Module.Logging/Cocoar.JsEval.Module.Logging.csproj" />
+    <Project Path="Modules/JsEval.Module.Smtp/Cocoar.JsEval.Module.Smtp.csproj" />
+    <Project Path="Modules/JsEval.Module.Template/Cocoar.JsEval.Module.Template.csproj" />
+    <Project Path="Modules/JsEval.Module.VirtualFileSystem/Cocoar.JsEval.Module.VirtualFileSystem.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/JsEval.Tests.Engine/JsEval.Tests.Engine.csproj" />
+    <Project Path="Tests/JsEval.Tests.TypeScript/JsEval.Tests.TypeScript.csproj" />
+    <Project Path="Tests/JsEval.Tests.Modules/JsEval.Tests.Modules.csproj" />
+  </Folder>
+  <Folder Name="/Benchmarks/">
+    <Project Path="Benchmarks/JsEval.Benchmarks/JsEval.Benchmarks.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Module.Smtp</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Module.Smtp</RootNamespace>
+    <PackageId>Cocoar.JsEval.Module.Smtp</PackageId>
+    <Description>SMTP email module for JsEval scripting engines</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MailKit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

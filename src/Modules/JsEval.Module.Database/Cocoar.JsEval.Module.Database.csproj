@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Module.Database</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Module.Database</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>Cocoar.JsEval.Module.Database</PackageId>
+    <Description>SQL Server and PostgreSQL database module for JsEval scripting engines</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="SqlKata" />
+    <PackageReference Include="SqlKata.Execution" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\JsEval\Cocoar.JsEval.csproj" />
+  </ItemGroup>
+
+</Project>

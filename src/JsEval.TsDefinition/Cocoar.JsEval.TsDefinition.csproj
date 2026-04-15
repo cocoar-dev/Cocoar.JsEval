@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.TsDefinition</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.TsDefinition</RootNamespace>
+    <PackageId>Cocoar.JsEval.TsDefinition</PackageId>
+    <Description>.d.ts definition generation for Cocoar.JsEval IntelliSense support</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="TsDefinitions\global.d.ts" />
+    <None Remove="TsDefinitions\lib.es2015.core.d.ts" />
+    <None Remove="TsDefinitions\lib.es5.d.ts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="TsDefinitions\global.d.ts" LogicalName="global.d.ts">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="TsDefinitions\lib.es2015.core.d.ts" LogicalName="lib.es2015.core.d.ts">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="TsDefinitions\lib.es5.d.ts" LogicalName="lib.es5.d.ts">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Cocoar.Reflectensions" />
+    <PackageReference Include="Cocoar.Reflectensions.ExpandableObject" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JsEval\Cocoar.JsEval.csproj" />
+    <ProjectReference Include="..\JsEval.Engine\Cocoar.JsEval.Engine.csproj" />
+  </ItemGroup>
+
+</Project>
