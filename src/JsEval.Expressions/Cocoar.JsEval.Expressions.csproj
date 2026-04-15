@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Cocoar.JsEval.Expressions</PackageId>
+    <AssemblyName>Cocoar.JsEval.Expressions</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Expressions</RootNamespace>
+    <Description>Expression Tree helpers for building LINQ-compatible filters from script-driven logic. Handles enum-as-string comparison, closure-captured lists for Contains/IN, and expression rewriting.</Description>
+  </PropertyGroup>
+
+</Project>

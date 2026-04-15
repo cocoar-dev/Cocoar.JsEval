@@ -127,6 +127,7 @@ const data = await loadData('item-123'); // .NET Task becomes a Promise
 | `Cocoar.JsEval.Engine` | JsEngine + fetch() + DI registration |
 | `Cocoar.JsEval.TypeScript` | TypeScript 6.0 transpiler |
 | `Cocoar.JsEval.TsDefinition` | .d.ts generation for IntelliSense |
+| `Cocoar.JsEval.Expressions` | Expression Tree helpers for LINQ-compatible filters |
 | `Cocoar.JsEval.Module.Common` | Guid, Sleep, Random |
 | `Cocoar.JsEval.Module.Http` | Fluent HTTP client |
 | `Cocoar.JsEval.Module.Database` | SQL Server + PostgreSQL |

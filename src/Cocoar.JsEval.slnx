@@ -4,6 +4,7 @@
     <Project Path="JsEval.Engine/Cocoar.JsEval.Engine.csproj" />
     <Project Path="JsEval.TypeScript/Cocoar.JsEval.TypeScript.csproj" />
     <Project Path="JsEval.TsDefinition/Cocoar.JsEval.TsDefinition.csproj" />
+    <Project Path="JsEval.Expressions/Cocoar.JsEval.Expressions.csproj" />
   </Folder>
   <Folder Name="/Modules/">
     <Project Path="Modules/JsEval.Module.AngleSharp/Cocoar.JsEval.Module.AngleSharp.csproj" />
@@ -19,6 +20,7 @@
     <Project Path="Tests/JsEval.Tests.Engine/JsEval.Tests.Engine.csproj" />
     <Project Path="Tests/JsEval.Tests.TypeScript/JsEval.Tests.TypeScript.csproj" />
     <Project Path="Tests/JsEval.Tests.Modules/JsEval.Tests.Modules.csproj" />
+    <Project Path="Tests/JsEval.Tests.Expressions/JsEval.Tests.Expressions.csproj" />
   </Folder>
   <Folder Name="/Benchmarks/">
     <Project Path="Benchmarks/JsEval.Benchmarks/JsEval.Benchmarks.csproj" />

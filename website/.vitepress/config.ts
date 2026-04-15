@@ -71,6 +71,7 @@ export default withMermaid(
           {
             text: 'Advanced',
             items: [
+              { text: 'Expression Helpers', link: '/guide/expressions' },
               { text: 'TypeScript Definitions (.d.ts)', link: '/guide/ts-definitions' },
               { text: 'Custom Modules <span class="badge-adv" title="Advanced topic"></span>', link: '/guide/custom-modules' },
               { text: 'Module Tagging <span class="badge-adv" title="Advanced topic"></span>', link: '/guide/module-tagging' },
