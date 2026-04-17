@@ -150,6 +150,30 @@ The emitted Expression Tree is **structurally identical** to what the C# compile
 
 So the contract is simple: **what works in C# works in JS. What doesn't, doesn't.**
 
+### Provider-specific method support
+
+Translation to SQL happens at the LINQ provider level — our translator produces a valid Expression tree, but whether a given method call is actually convertible to SQL is up to the provider. The table below is **measured** by running each method through our three provider sandboxes (see `src/Experiments/*.Sandbox/Program.cs`, scenario "Method matrix"):
+
+| Method (JS or C# alias) | Marten (PG/JSONB) | EF Core (SQLite) | LINQ2DB (SQLite) |
+|---|:---:|:---:|:---:|
+| `startsWith` / `StartsWith` | ✅ | ✅ | ✅ |
+| `endsWith` / `EndsWith` | ✅ | ✅ | ✅ |
+| `includes` / `Contains` (string) | ✅ | ✅ | ✅ |
+| `toLowerCase` / `ToLower` | ✅ | ✅ | ✅ |
+| `toUpperCase` / `ToUpper` | ✅ | ✅ | ✅ |
+| **`indexOf` / `IndexOf`** | **❌** `BadLinqExpressionException` | ✅ | ✅ |
+| **`(int).toString` / `ToString`** | **❌** `BadLinqExpressionException` | ✅ | ✅ |
+| `some` / `Any` (on collection property) | ✅ (JSONB `@>`) | — | — |
+| `includes` / `Contains` (on collection property) | ✅ (JSONB `@>`) | — | — |
+
+Notes:
+
+- EF Core and LINQ2DB were tested against SQLite — results may vary for SQL Server / Postgres / Oracle where a provider can emit a native equivalent (e.g. `POSITION`, `CHARINDEX`). Always sanity-check with your actual database.
+- Marten's `IndexOf` / `ToString` rejection is a known limitation of Marten's LINQ translator (tracked upstream). If you need "substring contained", use `includes` / `Contains` — it maps to `LIKE '%…%'` which Marten supports.
+- Our translator deliberately does **not** pre-validate — it produces the Expression tree you wrote, the provider decides if it can emit SQL for it. This is the **same** behaviour you'd get from a hand-written C# source lambda.
+
+**Rule of thumb:** for portability across providers, stick to `startsWith` / `endsWith` / `includes` / `ToLower` / `ToUpper`. The stricter providers (like Marten) set the common denominator.
+
 ## Property Dependency Tracking
 
 Once you have an Expression Tree, you can ask it: *"which properties does this query touch?"* — essential for triggers, cache invalidation, and reactive re-evaluation.

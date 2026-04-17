@@ -63,7 +63,34 @@ await Run("1. JS -> Expression -> EF Core SQLite: byte-identical SQL", async db 
     }
 });
 
-await Run("2. Dependency tracking: reactive re-run matrix", async db =>
+await Run("2. Method matrix — which string methods does EF Core translate?", async db =>
+{
+    var tests = new (string Name, Expression<Func<User, bool>> Expr)[]
+    {
+        ("StartsWith",    u => u.Name.StartsWith("A")),
+        ("EndsWith",      u => u.Name.EndsWith("e")),
+        ("Contains",      u => u.Name.Contains("o")),
+        ("IndexOf >= 0",  u => u.Name.IndexOf("A") >= 0),
+        ("ToLower",       u => u.Name.ToLower() == "alice"),
+        ("ToUpper",       u => u.Name.ToUpper() == "ALICE"),
+        ("int.ToString",  u => u.Age.ToString() == "30"),
+    };
+
+    foreach (var (name, expr) in tests)
+    {
+        try
+        {
+            var _ = await db.Users.AsNoTracking().Where(expr).ToListAsync();
+            Console.WriteLine($"  {name,-20} ✓");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  {name,-20} ✗  {ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
+        }
+    }
+});
+
+await Run("3. Dependency tracking: reactive re-run matrix", async db =>
 {
     var engine = new Engine(opts =>
     {
