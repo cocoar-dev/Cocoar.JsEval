@@ -20,13 +20,20 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Cocoar.JsEval.Engine;
 
-public sealed class JsEngine : IJsEngine
+public sealed class JsEngine : IScriptEngine, IDisposable, IAsyncDisposable
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IJsModuleRegistry _moduleRegistry;
     private readonly ILogger<JsEngine> _logger;
 
     public JsEngineOptions Options { get; }
+
+    /// <summary>
+    /// The underlying Jint engine. Exposed so advanced consumers (e.g. custom LINQ
+    /// translators, direct Jint interop) can reach Jint APIs that the higher-level
+    /// facade intentionally hides.
+    /// </summary>
+    public Jint.Engine UnderlyingEngine => _engine;
 
     private readonly Jint.Engine _engine;
     private readonly JsonParser _jsonParser;
@@ -275,6 +282,16 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
     /// </summary>
     public void Evaluate(string script) =>
         _engine.Execute(script);
+
+    /// <summary>
+    /// Evaluates a JS expression and returns the resulting <see cref="JsValue"/>.
+    /// Use this when the script is a single expression whose value you need
+    /// (e.g. <c>"(u) => u.Name === 'A'"</c> for the LINQ translator).
+    /// Unlike <see cref="Evaluate(string)"/> which uses statement semantics, this
+    /// maps to Jint's <c>Evaluate</c> — the expression's value is returned.
+    /// </summary>
+    public JsValue EvaluateExpression(string script) =>
+        _engine.Evaluate(script);
 
     /// <summary>
     /// Evaluates a pre-parsed script synchronously. Avoids re-parsing on every call.

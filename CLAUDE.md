@@ -34,7 +34,7 @@ cd website && npm run dev
 ### Core Packages
 
 - **Cocoar.JsEval** (`src/JsEval/`) — Core interfaces, helpers, JsFunction, IJsModule, JsModuleRegistry
-- **Cocoar.JsEval.Engine** (`src/JsEval.Engine/`) — JsEngine, IJsEngine, JsEvalBuilder, fetch(), `CsDateTime`, DI registration
+- **Cocoar.JsEval.Engine** (`src/JsEval.Engine/`) — JsEngine, JsEvalBuilder, fetch(), `CsDateTime`, DI registration
 - **Cocoar.JsEval.TypeScript** (`src/JsEval.TypeScript/`) — TsTranspiler with embedded TypeScript 6.0 compiler, engine pooling
 - **Cocoar.JsEval.TsDefinition** (`src/JsEval.TsDefinition/`) — .d.ts generation from C# types for IntelliSense
 - **Cocoar.JsEval.Linq** (`src/JsEval.Linq/`) — JS arrow function → `Expression<Func<T, TResult>>` translator for any `IQueryable<T>` provider (Marten/EF/LINQ2DB/…), with `linq.*` typed literals, ordering extensions, property-dependency collector, and `ReflectionCache` for hot-loops

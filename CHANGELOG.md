@@ -2,13 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.0.0]
+## [3.0.0]
 
-### Breaking
+v3.0.0 rolls up v2.0.0 plus a small but breaking API cleanup surfaced by first-adopter integration. v2.0.0 was unlisted from NuGet the same day; install v3.0.0 directly.
+
+### Breaking (v2.0.0 → v3.0.0)
+- **`IJsEngine` interface removed.** The interface claimed an engine-swap abstraction that the library does not actually support (the whole codebase depends on Jint's `JsValue`/`ScriptFunction`/Acornima AST). `JsEngine` is now the public contract.
+  - **Migration:** replace `sp.GetRequiredService<IJsEngine>()` with `sp.GetRequiredService<JsEngine>()`; replace `IJsEngine` parameter/field types with `JsEngine`. No other behaviour changed.
+
+### Added in v3.0.0 (on top of v2.0.0)
+- **`JsEngine.UnderlyingEngine { get; }`** — direct public access to the underlying `Jint.Engine`, so advanced consumers can reach Jint APIs without reflection.
+- **`JsEngine.EvaluateExpression(string): JsValue`** — expression-semantics evaluation that returns the resulting `JsValue` (the existing `Evaluate(string)` remains statement-semantics / `void`). The common "evaluate a JS expression, hand it to the Linq translator" flow no longer needs a `__result` global or reflection hack.
+- **`Cocoar.JsEval.Linq` convenience overloads** — `JsExpressionTranslator.Translate` / `TranslateLambda` / `JsLinqContext.Scope` accept `JsEngine` directly (in addition to the existing `Jint.Engine` overloads). Consumers no longer need to touch Jint directly for typical scenarios.
+
+### Breaking (v1.0.0 → v2.0.0, carried into v3.0.0)
 - **`Cocoar.JsEval.Expressions` package removed.** Its string-DSL expression builder (`ExpressionHelper.Equal("path", value)`, `FilterBuilder`, …) is superseded by `Cocoar.JsEval.Linq`, which produces the same Expression Trees from JS/TS predicates written in natural syntax. Internal utilities from the old package (`PropertyPath`, `ListHolder`, `EnumExpressionHelper`, `ExpressionRewriter`) were migrated into `Cocoar.JsEval.Linq/Building/` as implementation details of the translator.
   - **Migration:** rewrite `ExpressionHelper.Equal<T, V>("Name", value)` as JS — `users.where(u => u.Name === value)` — or inline it in a C# source lambda. For dotted paths `ExpressionHelper.StartsWith<T>("Customer.Name", "A")` becomes `users.where(u => u.Customer.Name.startsWith('A'))`.
 
-### Added
+### Added (originally in v2.0.0, included in v3.0.0)
 - **Cocoar.JsEval.Linq** — Translates JS arrow functions into real .NET Expression Trees
   - `JsExpressionTranslator` — walks Jint/Acornima AST, produces `Expression<Func<T, TResult>>`; `TranslateLambda<T>` overload infers `TResult` from body (for `OrderBy` key selectors etc.)
   - `JsLinqExtensions` — natural-name `Where` / `Find` / `Count` / `Any` / `OrderBy` / `OrderByDescending` / `ThenBy` / `ThenByDescending` on `IQueryable<T>` (register with `AddLinq()`)

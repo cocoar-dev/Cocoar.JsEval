@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using Acornima;
 using Acornima.Ast;
+using Cocoar.JsEval.Engine;
 using Cocoar.JsEval.Linq.Internal;
 using Cocoar.JsEval.Linq.MethodMapping;
 using Jint;
@@ -26,6 +27,10 @@ public static class JsExpressionTranslator
     public static Expression<Func<T, TResult>> Translate<T, TResult>(JsValue function, Jint.Engine? engine = null)
         => Translate<T, TResult>(function, engine, options: null);
 
+    /// <summary>Convenience overload that takes a <see cref="JsEngine"/> directly.</summary>
+    public static Expression<Func<T, TResult>> Translate<T, TResult>(JsValue function, JsEngine engine, TranslationOptions? options = null)
+        => Translate<T, TResult>(function, engine?.UnderlyingEngine, options);
+
     /// <summary>Full translate overload with pluggable options.</summary>
     public static Expression<Func<T, TResult>> Translate<T, TResult>(JsValue function, Jint.Engine? engine, TranslationOptions? options)
     {
@@ -47,6 +52,10 @@ public static class JsExpressionTranslator
         var delegateType = typeof(Func<,>).MakeGenericType(typeof(T), body.Type);
         return LinqExpr.Lambda(delegateType, body, parameter);
     }
+
+    /// <summary>Convenience overload that takes a <see cref="JsEngine"/> directly.</summary>
+    public static LambdaExpression TranslateLambda<T>(JsValue function, JsEngine engine, TranslationOptions? options = null)
+        => TranslateLambda<T>(function, engine?.UnderlyingEngine, options);
 
     private static (ParameterExpression parameter, LinqExpr body) TranslateCore(
         JsValue function, Type parameterType, Jint.Engine? engine, TranslationOptions? options)

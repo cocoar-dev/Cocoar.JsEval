@@ -25,7 +25,7 @@ public class CommonModule : IJsModule { /* ... */ }
 After obtaining an engine instance, specify which tags to allow:
 
 ```csharp
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 // Only load modules tagged "public" (plus untagged modules)
 engine.AddTaggedModules("public");

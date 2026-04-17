@@ -2,51 +2,41 @@
 
 ## Core Types
 
-### IJsEngine
+### JsEngine
 
-Interface for testability. Consumers resolve `IJsEngine` from DI instead of the concrete `JsEngine`.
+Main engine for JavaScript execution. Sealed class, resolved from DI.
 
 ```csharp
-public interface IJsEngine : IScriptEngine, IDisposable, IAsyncDisposable
+public sealed class JsEngine : IScriptEngine, IDisposable, IAsyncDisposable
 {
+    // Underlying Jint engine for advanced interop
+    Jint.Engine UnderlyingEngine { get; }
+
     // Values
     void SetValue(string name, object value);
     T? GetValue<T>(string name);
-    object GetValue(string name);
     string GetValueAsJson(string name);
 
-    // Execution
-    object? Evaluate(string script);
-    object? Evaluate(JsPreparedScript preparedScript);
-    Task<object?> EvaluateAsync(string script);
-    Task<object?> ExecuteAsync(string script);
-    void Stop();
+    // Execution (statement semantics — void return)
+    void Evaluate(string script);
+    void Evaluate(JsPreparedScript prepared);
+    Task EvaluateAsync(string script);
+    Task ExecuteAsync(string script);
+
+    // Expression-semantics evaluation (returns the resulting JsValue)
+    Jint.Native.JsValue EvaluateExpression(string script);
 
     // Functions
     JsFunction? GetFunction(string name);
     object InvokeFunction(string name, params object[] args);
+    void Stop();
 
-    // Modules
-    void AddModuleParameterInstance(Type type, Func<object> factory);
-    void AddTaggedModules(params string[] tags);
-    T? GetModuleState<T>();
-}
-```
-
-### JsEngine
-
-Main engine for JavaScript execution. Implements `IJsEngine`.
-
-```csharp
-public class JsEngine : IJsEngine
-{
     // Static
     static JsPreparedScript Prepare(string script);
 
     // JSON (IScriptEngine)
     object? JsonParse(string? json);
     string JsonStringify(object? value);
-    object? ConvertToDefaultObject(object? value);
 }
 ```
 

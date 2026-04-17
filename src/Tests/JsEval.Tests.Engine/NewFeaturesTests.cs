@@ -28,7 +28,7 @@ public class UntaggedTestModule : IJsModule
 /// <summary>
 /// Comprehensive tests for features added during the optimization/improvement phase:
 /// Evaluate, Prepare, EvaluateAsync, console, setTimeout, structuredClone,
-/// engine reuse, JsEvalBuilder, IJsEngine DI, tag filtering, and debug mode.
+/// engine reuse, JsEvalBuilder, JsEngine DI, tag filtering, and debug mode.
 /// </summary>
 public class NewFeaturesTests
 {
@@ -479,24 +479,24 @@ export const guid = common.Guid.New();
     }
 
     // =================================================================
-    // 9. IJsEngine via DI
+    // 9. JsEngine via DI
     // =================================================================
 
     [Fact]
-    public void IJsEngine_CanBeResolvedFromDI()
+    public void JsEngine_CanBeResolvedFromDI()
     {
         using var sp = BuildServiceProvider();
-        var engine = sp.GetRequiredService<IJsEngine>();
+        var engine = sp.GetRequiredService<JsEngine>();
 
         Assert.NotNull(engine);
         Assert.IsType<JsEngine>(engine);
     }
 
     [Fact]
-    public void IJsEngine_CanExecuteScript()
+    public void JsEngine_CanExecuteScript()
     {
         using var sp = BuildServiceProvider();
-        using var engine = sp.GetRequiredService<IJsEngine>();
+        using var engine = sp.GetRequiredService<JsEngine>();
 
         engine.Evaluate("var x = 42;");
         var result = engine.GetValue<int>("x");
@@ -505,12 +505,12 @@ export const guid = common.Guid.New();
     }
 
     [Fact]
-    public void IJsEngine_EachResolveCreatesNewInstance()
+    public void JsEngine_EachResolveCreatesNewInstance()
     {
         using var sp = BuildServiceProvider();
 
-        using var engine1 = sp.GetRequiredService<IJsEngine>();
-        using var engine2 = sp.GetRequiredService<IJsEngine>();
+        using var engine1 = sp.GetRequiredService<JsEngine>();
+        using var engine2 = sp.GetRequiredService<JsEngine>();
 
         Assert.NotSame(engine1, engine2);
     }

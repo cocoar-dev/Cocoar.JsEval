@@ -88,7 +88,7 @@ public class NotificationModule : IJsModule
 Provide runtime-specific instances to module constructors:
 
 ```csharp
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 // Register a factory for a specific type
 engine.AddModuleParameterInstance(typeof(HttpContext), () => currentHttpContext);

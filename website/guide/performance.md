@@ -132,7 +132,7 @@ Engine creation is the largest fixed cost (~55 µs). If your scripts don't use t
 
 ```csharp
 // Create once
-var engine = sp.GetRequiredService<IJsEngine>();
+var engine = sp.GetRequiredService<JsEngine>();
 
 // Reuse — SetValue overwrites previous values
 engine.SetValue("input", newData);

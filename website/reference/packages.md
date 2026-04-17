@@ -7,7 +7,7 @@ All packages target **.NET 10.0** and are published to [NuGet.org](https://www.n
 | Package | Description |
 |---------|-------------|
 | [`Cocoar.JsEval`](https://www.nuget.org/packages/Cocoar.JsEval) | Core interfaces and contracts (`IJsModule`, `IScriptEngine`, `JsModuleAttribute`, `JsModuleRegistry`) |
-| [`Cocoar.JsEval.Engine`](https://www.nuget.org/packages/Cocoar.JsEval.Engine) | `JsEngine`, `IJsEngine`, `JsEvalBuilder`, DI registration (`AddJsEval()`) |
+| [`Cocoar.JsEval.Engine`](https://www.nuget.org/packages/Cocoar.JsEval.Engine) | `JsEngine`, `JsEvalBuilder`, DI registration (`AddJsEval()`) |
 
 ## TypeScript
 

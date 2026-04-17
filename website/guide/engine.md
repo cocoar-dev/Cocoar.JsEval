@@ -8,10 +8,10 @@
 services.AddJsEval();
 ```
 
-Resolve the engine via `IJsEngine` for testability:
+Resolve the engine via `JsEngine` for testability:
 
 ```csharp
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 ```
 
 ## Configuration
@@ -48,7 +48,7 @@ JsEngine provides four execution methods for different use cases:
 `ExecuteAsync(string)` is the **default/standard** method. It runs scripts as ES modules with full `import`/`export`, `async`/`await`, and module system support. Use this when you don't know what's in the script.
 
 ```csharp
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 await engine.ExecuteAsync(@"
 import * as common from 'common'
@@ -65,7 +65,7 @@ var result = engine.GetValue<string>("result");
 `Evaluate(string)` and `Evaluate(JsPreparedScript)` run scripts synchronously without the module system. No `import`/`export`, no `async`/`await`. This is a **conscious opt-in** for a restricted execution mode -- choose it when you know your scripts don't need modules. Ideal for policy evaluation, rule engines, and simple expressions.
 
 ```csharp
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 engine.SetValue("age", 25);
 engine.Evaluate("const allowed = age >= 18;");
@@ -77,7 +77,7 @@ var allowed = engine.GetValue<bool>("allowed"); // true
 `EvaluateAsync(string)` runs scripts asynchronously but without the module system. Use this when your script needs `async`/`await` but doesn't need modules.
 
 ```csharp
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 engine.SetValue("loadData", new Func<string, Task<string>>(async id => await db.FindAsync(id)));
 await engine.EvaluateAsync("const data = await loadData('item-123');");
@@ -106,7 +106,7 @@ var data = engine.GetValue<string>("data");
 var prepared = JsEngine.Prepare("const x = a + b;");
 
 // Execute many times
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 engine.SetValue("a", 10);
 engine.SetValue("b", 20);
 engine.Evaluate(prepared);
@@ -122,7 +122,7 @@ var result = engine.GetValue<int>("x"); // 30
 All execution methods (`Evaluate()`, `EvaluateAsync()`, and `ExecuteAsync()`) can be called multiple times on the same engine instance. Use `SetValue` to update globals between executions -- values are overwritten, not accumulated.
 
 ```csharp
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 engine.SetValue("x", 1);
 engine.Evaluate("const a = x + 1;");

@@ -19,7 +19,7 @@ graph TD
 
 | Type | Purpose |
 |------|---------|
-| `IJsEngine` | Interface for testability. Consumers resolve this from DI. |
+| `JsEngine` | Interface for testability. Consumers resolve this from DI. |
 | `JsEngine` | Main engine. Executes JavaScript, manages modules, exposes values and functions. |
 | `JsEvalBuilder` | Fluent builder for configuring engine options and module registration in one call. |
 | `IJsModule` | Marker interface for modules. Modules expose methods/properties to scripts. |
@@ -30,7 +30,7 @@ graph TD
 
 ## JsEngine
 
-`JsEngine` wraps [Jint](https://github.com/sebastienros/jint) 4.8, a .NET JavaScript interpreter (ES2025). It implements `IJsEngine` and supports:
+`JsEngine` wraps [Jint](https://github.com/sebastienros/jint) 4.8, a .NET JavaScript interpreter (ES2025). It supports:
 
 - Four execution methods:
   - `ExecuteAsync(string)` -- **standard**, full ES modules, import/export, async/await
@@ -66,7 +66,7 @@ sequenceDiagram
     App->>DI: services.AddJsEval(b => b.EnableFetch().AddModule<HttpModule>())
     DI->>Opts: EnableFetch(), etc.
     DI->>Reg: AddModule<HttpModule>()
-    App->>DI: GetRequiredService<IJsEngine>()
+    App->>DI: GetRequiredService<JsEngine>()
     DI-->>App: JsEngine instance
 ```
 
@@ -84,7 +84,7 @@ When a script calls `require('modulename')` or `import * from 'modulename'`:
 JsEval is split into focused packages:
 
 - **Cocoar.JsEval** -- Core interfaces (`IJsModule`, `IScriptEngine`, `JsModuleAttribute`, `JsModuleRegistry`)
-- **Cocoar.JsEval.Engine** -- `JsEngine`, `IJsEngine`, `JsEvalBuilder`, DI registration (`AddJsEval()`)
+- **Cocoar.JsEval.Engine** -- `JsEngine`, `JsEvalBuilder`, DI registration (`AddJsEval()`)
 - **Cocoar.JsEval.TypeScript** -- `TsTranspiler`, DI registration (`AddTsTranspiler()`)
 - **Cocoar.JsEval.TsDefinition** -- TypeScript `.d.ts` generation for modules
 - **Cocoar.JsEval.Module.*** -- 9 built-in modules

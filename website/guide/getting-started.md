@@ -32,10 +32,10 @@ services.AddJsEval(b => b
 
 ## Execute a Script
 
-Resolve `IJsEngine` from DI and execute scripts:
+Resolve `JsEngine` from DI and execute scripts:
 
 ```csharp
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 // Standard — full ES module support (import/export, async/await)
 engine.SetValue("name", "World");
@@ -71,7 +71,7 @@ services.AddTsTranspiler();
 
 // ...
 var transpiler = serviceProvider.GetRequiredService<TsTranspiler>();
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 var tsScript = @"
 const a: number = 1;
@@ -90,7 +90,7 @@ var result = engine.GetValue<int>("sum"); // 3
 Pre-parse scripts for repeated execution:
 
 ```csharp
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 // Parse once
 var prepared = JsEngine.Prepare("const x = 1 + 2;");

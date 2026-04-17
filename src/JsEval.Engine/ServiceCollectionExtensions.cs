@@ -40,7 +40,6 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IJsModuleRegistry>(),
             sp.GetRequiredService<JsEngineOptions>(),
             sp.GetService<ILogger<JsEngine>>()));
-        services.AddTransient<IJsEngine>(sp => sp.GetRequiredService<JsEngine>());
 
         return services;
     }

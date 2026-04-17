@@ -17,7 +17,7 @@ Use `TsTranspiler.Transpile()` to convert TypeScript source to JavaScript:
 
 ```csharp
 var transpiler = serviceProvider.GetRequiredService<TsTranspiler>();
-var engine = serviceProvider.GetRequiredService<IJsEngine>();
+var engine = serviceProvider.GetRequiredService<JsEngine>();
 
 var tsSource = @"
 const greeting: string = 'Hello';

@@ -33,6 +33,10 @@ public static class JsLinqContext
         return new Restore(previous);
     }
 
+    /// <summary>Convenience overload that takes a <see cref="Engine.JsEngine"/> directly.</summary>
+    public static IDisposable Scope(Engine.JsEngine engine, TranslationOptions? options = null)
+        => Scope(engine.UnderlyingEngine, options);
+
     private sealed class State
     {
         public Jint.Engine? Engine;

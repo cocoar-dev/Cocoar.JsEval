@@ -17,7 +17,6 @@ JavaScript/TypeScript execution library for .NET, built on [Jint](https://github
 - `setTimeout`/`setInterval` support
 - Extensible module system (HTTP, Database, SMTP, Templates, and more)
 - `.d.ts` generation for IntelliSense support
-- `IJsEngine` interface for testability and mocking
 - Built for .NET 10
 
 ## Quick Start
@@ -33,7 +32,7 @@ services.AddJsEval();
 ```
 
 ```csharp
-var engine = sp.GetRequiredService<IJsEngine>();
+var engine = sp.GetRequiredService<JsEngine>();
 engine.SetValue("name", "World");
 engine.Evaluate("var greeting = 'Hello, ' + name + '!';");
 var result = engine.GetValue<string>("greeting"); // "Hello, World!"
@@ -49,7 +48,7 @@ services.AddJsEval(b => b
 ```
 
 ```csharp
-var engine = sp.GetRequiredService<IJsEngine>();
+var engine = sp.GetRequiredService<JsEngine>();
 await engine.ExecuteAsync(@"
     import * as common from 'common'
     export const id = common.Guid.New();
