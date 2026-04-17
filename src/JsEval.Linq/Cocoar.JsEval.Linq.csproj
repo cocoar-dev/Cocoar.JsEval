@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <AssemblyName>Cocoar.JsEval.Linq</AssemblyName>
+    <RootNamespace>Cocoar.JsEval.Linq</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>Cocoar.JsEval.Linq</PackageId>
+    <Description>Translates JavaScript arrow functions from Jint into real .NET Expression trees so any IQueryable LINQ provider (Marten, EF Core, LINQ2DB, ...) can convert them to native queries. Includes natural-name extension methods and property-dependency collector.</Description>
+    <PackageTags>scripting;javascript;typescript;jint;linq;expression;iqueryable;marten;efcore</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jint" />
+    <PackageReference Include="Cocoar.Reflectensions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JsEval.Engine\Cocoar.JsEval.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="TypeScript\cocoar-jseval-linq.d.ts" />
+  </ItemGroup>
+
+</Project>

@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
@@ -14,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\JsEval.Expressions\Cocoar.JsEval.Expressions.csproj" />
+    <ProjectReference Include="..\..\JsEval.Linq\Cocoar.JsEval.Linq.csproj" />
   </ItemGroup>
 
 </Project>

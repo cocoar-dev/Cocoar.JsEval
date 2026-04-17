@@ -1,14 +1,13 @@
-using System;
 using System.Linq.Expressions;
 
-namespace Cocoar.JsEval.Expressions;
+namespace Cocoar.JsEval.Linq.Building;
 
 /// <summary>
 /// Rewrites Expression Trees to fix common incompatibilities with LINQ providers.
 /// Use this when you receive an expression from C# compiler or other sources
 /// that needs adjustments for your ORM/database.
 /// </summary>
-public sealed class ExpressionRewriter : ExpressionVisitor
+internal sealed class ExpressionRewriter : ExpressionVisitor
 {
     /// <summary>
     /// Rewrites enum comparisons that use <c>Convert(enum, Int32)</c> to compare
@@ -16,7 +15,7 @@ public sealed class ExpressionRewriter : ExpressionVisitor
     ///
     /// This fixes the common problem where ORMs that store enums as strings
     /// generate <c>CAST(column AS integer) = 2</c> instead of <c>column = 'Active'</c>.
-    ///
+    /// </summary>
     /// <example>
     /// <code>
     /// // Before: t => (Convert(t.Status, Int32) == Convert(value, Int32))
@@ -24,7 +23,6 @@ public sealed class ExpressionRewriter : ExpressionVisitor
     /// // After:  t => (t.Status == value)
     /// </code>
     /// </example>
-    /// </summary>
     public static Expression<Func<T, bool>> RewriteEnumConversions<T>(Expression<Func<T, bool>> expression)
     {
         var rewriter = new EnumConversionRewriter();
@@ -43,10 +41,8 @@ public sealed class ExpressionRewriter : ExpressionVisitor
 
                 if (left != node.Left || right != node.Right)
                 {
-                    // Ensure both sides have the same type
                     if (left.Type != right.Type && left.Type.IsEnum && right.Type == typeof(int))
                     {
-                        // Right side is an int constant — convert to enum value
                         if (right is ConstantExpression constExpr && constExpr.Value is int intValue)
                             right = Expression.Constant(Enum.ToObject(left.Type, intValue), left.Type);
                     }
@@ -61,20 +57,17 @@ public sealed class ExpressionRewriter : ExpressionVisitor
                         : Expression.NotEqual(left, right);
                 }
             }
-
             return base.VisitBinary(node);
         }
 
         private static Expression UnwrapEnumConvert(Expression expression)
         {
-            // Strip Convert(enumValue, Int32) or Convert(enumValue, Int64)
             if (expression is UnaryExpression { NodeType: ExpressionType.Convert } unary
                 && unary.Operand.Type.IsEnum
                 && (unary.Type == typeof(int) || unary.Type == typeof(long)))
             {
                 return unary.Operand;
             }
-
             return expression;
         }
     }

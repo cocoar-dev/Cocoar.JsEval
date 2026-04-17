@@ -18,6 +18,27 @@ public sealed class JsEvalBuilder
         return this;
     }
 
+    /// <summary>
+    /// Registers a callback invoked after the underlying Jint engine is created.
+    /// Used by add-on packages to register their globals.
+    /// </summary>
+    public JsEvalBuilder RegisterEngineConfigurator(Action<Jint.Engine> configurator)
+    {
+        Options.RegisterEngineConfigurator(configurator);
+        return this;
+    }
+
+    /// <summary>
+    /// Exposes <see cref="CsDateTime"/> as a JS global so scripts can do date
+    /// arithmetic from JS — <c>CsDateTime.Now.AddDays(7)</c> — without Jint
+    /// flattening the value into a JS <c>Date</c>.
+    /// </summary>
+    public JsEvalBuilder EnableCsDateTime()
+    {
+        Options.RegisterEngineConfigurator(CsDateTimeGlobals.Register);
+        return this;
+    }
+
     public JsEvalBuilder EnableDebugMode()
     {
         Options.EnableDebugMode();

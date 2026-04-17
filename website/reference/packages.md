@@ -33,4 +33,4 @@ All packages target **.NET 10.0** and are published to [NuGet.org](https://www.n
 | Package | Description |
 |---------|-------------|
 | [`Cocoar.JsEval.TsDefinition`](https://www.nuget.org/packages/Cocoar.JsEval.TsDefinition) | TypeScript `.d.ts` generation for modules |
-| [`Cocoar.JsEval.Expressions`](https://www.nuget.org/packages/Cocoar.JsEval.Expressions) | Expression Tree helpers for building LINQ-compatible filters (enum comparison, Contains/IN, combinators) |
+| [`Cocoar.JsEval.Linq`](https://www.nuget.org/packages/Cocoar.JsEval.Linq) | Translates JS arrow functions into real Expression Trees so any `IQueryable<T>` provider (Marten, EF Core, LINQ2DB, …) can convert them to native SQL. Includes property-dependency collector. |

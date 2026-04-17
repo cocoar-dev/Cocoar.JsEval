@@ -87,6 +87,9 @@ var console = {
 
         if (Options.FetchEnabled)
             Fetch.FetchHandler.Register(_engine);
+
+        foreach (var configurator in Options.EngineConfigurators)
+            configurator(_engine);
     }
 
     private void RegisterConsole()

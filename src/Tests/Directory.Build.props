@@ -12,6 +12,7 @@
     <!-- CA1852: Sealed type suggestions for test types -->
     <!-- CA1310: String comparison culture in tests -->
     <!-- CA1305: Format provider in test diagnostics -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CA1707;CA1816;CA1822;CA1852;CA1310;CA1305;CS0618;CS8625</NoWarn>
   </PropertyGroup>
 </Project>

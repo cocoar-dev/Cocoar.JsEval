@@ -64,4 +64,17 @@ public sealed class JsEngineOptions
         FetchEnabled = true;
         return this;
     }
+
+    internal List<Action<Jint.Engine>> EngineConfigurators { get; } = [];
+
+    /// <summary>
+    /// Registers a callback invoked after the underlying Jint engine is created,
+    /// giving add-on packages a hook to register globals, extension scripts, or
+    /// other setup without the core needing to know about them.
+    /// </summary>
+    public JsEngineOptions RegisterEngineConfigurator(Action<Jint.Engine> configurator)
+    {
+        EngineConfigurators.Add(configurator);
+        return this;
+    }
 }

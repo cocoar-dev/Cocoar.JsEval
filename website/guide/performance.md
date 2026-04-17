@@ -50,6 +50,36 @@ When reusing an engine instance, the creation overhead is eliminated. Combined w
 | `JsEngine.Prepare(script)` | 7 µs | Once per script (cacheable, thread-safe) |
 | TypeScript Transpile | 1-2 s | Once per script change (e.g., on save in admin UI) |
 
+## JS → LINQ Translator
+
+The [`Cocoar.JsEval.Linq`](/guide/linq) translator turns a JS arrow function into a real `Expression<Func<T, TResult>>`. Measurements assume a reused Jint engine with the JS function already parsed (the typical hot-loop case: translate the same predicate repeatedly when re-running a query).
+
+| Predicate shape | Mean | Allocated |
+|---|---:|---:|
+| Simple boolean property (`u => u.IsActive`) | **0.24 µs** | 632 B |
+| String method (`u => u.Name.startsWith('A')`) | 0.53 µs | 1,232 B |
+| Complex 3-clause `&&` | 0.78 µs | 1,688 B |
+| `CsDateTime.AddDays` + implicit op | 0.78 µs | 1,616 B |
+| Nested lambda (`u => u.Tags.some(t => …)`) | 0.95 µs | 1,680 B |
+| Cold (re-parse + translate) | 2.58 µs | 5,160 B |
+
+**Takeaway:** All shapes stay under ~1 µs warm. The translator sits at the same order of magnitude as a reused-engine `Evaluate(prepared)` call — effectively free versus the surrounding request cost.
+
+### Hot-loop use case
+
+For an ABAC-style rule engine that evaluates the same predicate thousands of times per request (e.g. 10 000 objects through a dynamic filter), the translator contributes only **~9.5 ms at 10 000 iterations even for the most expensive shape (nested lambda)**. A typical database round-trip (5–50 ms) dwarfs that.
+
+### Reflection cache
+
+An internal `ReflectionCache` (`ConcurrentDictionary`-backed, keyed by type + name + arg signature) memoizes every `GetProperty` / `GetMethod` / `GetImplicitCastMethodTo` / `MakeGenericMethod` call. The cache is warmed on first use and has no eviction — reflection info is immutable. The impact is most visible on nested lambdas and wrappers with implicit operators:
+
+| Shape | Before cache | After cache | Δ |
+|---|---:|---:|---:|
+| Nested lambda | 2.74 µs / 6.6 KB | 0.95 µs / 1.7 KB | **−65% / −74%** |
+| CsDateTime + implicit op | 1.31 µs / 3.0 KB | 0.78 µs / 1.6 KB | **−40% / −46%** |
+
+Simple predicates have nothing to cache and stay roughly the same (~15 ns dictionary-lookup overhead swallowed by noise).
+
 ## Choosing the Right Method
 
 ```
@@ -137,4 +167,5 @@ dotnet run -c Release -- --filter "*"
 dotnet run -c Release -- --filter "*EngineBenchmarks*"
 dotnet run -c Release -- --filter "*LightweightEvalBenchmarks*"
 dotnet run -c Release -- --filter "*TranspilerBenchmarks*"
+dotnet run -c Release -- --filter "*LinqTranslatorBenchmarks*"
 ```
