@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.0]
+
+### Added
+- **`Cocoar.JsEval.Linq` — Optional chaining (`?.`) in predicates.** `(t) => t.Customer?.Label.startsWith('A')` now translates to a null-safe expression tree. Each `?.` step short-circuits the rest of the chain to `null` if the guarded target is null. Skips the guard when the target is a non-nullable value type (never null). Works for both LINQ-provider translation and in-memory `Expression.Compile()` evaluation — removes the need for `x != null && x.y…` boilerplate in auto-membership and similar scenarios.
+- **`Cocoar.JsEval.Linq` — Nullish coalescing (`??`) in predicates.** `(u) => u.Name ?? 'anon'` translates to `Expression.Coalesce(…)`. Combines naturally with optional chaining: `(u) => (u.Address?.City ?? '') === 'Vienna'`.
+
+### Changed (behaviour)
+- **`AddJsEval` now registers `JsEngine` as scoped** instead of transient. Multiple services resolved in the same DI scope (e.g. per HTTP request) now share one engine — globals set via `SetValue` are visible across collaborators, and the "Jint engine is not thread-safe" contract is enforced at DI level rather than left to convention. Consumers that need isolated engines can still instantiate with `new JsEngine(…)`.
+
 ## [3.0.0]
 
 v3.0.0 rolls up v2.0.0 plus a small but breaking API cleanup surfaced by first-adopter integration. v2.0.0 was unlisted from NuGet the same day; install v3.0.0 directly.

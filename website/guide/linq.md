@@ -557,6 +557,31 @@ users.where(u => u.CreatedAt > cutoff.AddDays(-7))
 
 `CsDateTime` has `public static implicit operator DateTime(CsDateTime v)`. The translator uses `Cocoar.Reflectensions` to find this operator whenever a binary expression has mismatched types, and inserts a `Convert` node — so the Expression tree ends up as `u.CreatedAt > Convert(cutoff.AddDays(-7), DateTime)`. Marten / EF Core / LINQ2DB evaluate the constant-side subtree at translation time and emit plain SQL.
 
+### Null-safety: `?.` and `??` (v3.1+)
+
+Both optional chaining and nullish coalescing translate to Expression trees:
+
+```js
+// Optional chaining — each `?.` short-circuits the rest of the chain to null
+users.where(u => u.Address?.City === 'Vienna')
+users.where(u => u.Address?.City.startsWith('V') === true)
+
+// Nullish coalescing — fallback value when left side is null
+users.where(u => (u.Name ?? 'anon').startsWith('A'))
+
+// Combined — the common "safe nested access with default" shape
+users.where(u => (u.Address?.City ?? '') === 'Vienna')
+```
+
+**Shape the translator emits:**
+
+- `u.Address?.City` → `u.Address == null ? null : u.Address.City` (result type is `string` nullable)
+- Nested chains like `a?.b?.c` wrap outermost-first: `a == null ? null : (a.b == null ? null : a.b.c)`
+- A guard on a non-nullable value-type target is skipped (the target can never be null; e.g. `u.Id?.ToString()` where `Id` is a `Guid`)
+- `??` maps to `Expression.Coalesce` — CLR requires the left side to be a reference type or `Nullable<T>`
+
+**Works for both SQL translation and in-memory `Expression.Compile()`.** That makes `?.` particularly useful when you're also running the same predicate outside the LINQ provider (e.g. evaluating group membership against a single in-memory user object) — no `NullReferenceException` from un-guarded navigation.
+
 ### Enum
 
 JS has no native enum type, so predicates use strings or numbers:

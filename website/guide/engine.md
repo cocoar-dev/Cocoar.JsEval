@@ -14,6 +14,12 @@ Resolve the engine via `JsEngine` for testability:
 var engine = serviceProvider.GetRequiredService<JsEngine>();
 ```
 
+::: info DI lifetime: Scoped (since v3.1)
+`AddJsEval` registers `JsEngine` as **scoped**. Multiple services resolving `JsEngine` in the same scope (e.g. one HTTP request) share one engine — globals set via `SetValue` are visible across collaborators, and the "Jint is not thread-safe" contract holds by construction. If you need an isolated engine for a specific job, construct one directly with `new JsEngine(...)`.
+
+**Migration from v3.0 (transient):** if you relied on each `GetRequiredService<JsEngine>()` producing a fresh instance, either switch to explicit construction or wrap the work in `sp.CreateScope()`.
+:::
+
 ## Configuration
 
 Configure the engine using the `JsEvalBuilder`:

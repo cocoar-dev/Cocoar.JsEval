@@ -628,4 +628,75 @@ public class TranslatorTests
             _ = JsExpressionTranslator.Translate<TestUser, bool>(notAFunction);
         });
     }
+
+    // --- Nullish Coalescing (`??`) ---
+
+    [Fact]
+    public void NullishCoalesce_StringProperty_Fallback()
+    {
+        // Script shape: `(u) => (u.Address?.City ?? 'Unknown') === 'Vienna'`
+        // But we first test plain coalesce on a nullable reference to keep the baseline simple.
+        Expression<Func<TestUser, bool>> baseline = u => (u.Address!.City ?? "Unknown") == "Vienna";
+        var actual = Translate<TestUser, bool>("(u) => (u.Address.City ?? 'Unknown') === 'Vienna'");
+        Assert.Equal(baseline.ToString(), actual.ToString());
+    }
+
+    [Fact]
+    public void NullishCoalesce_CompilesAndRuns()
+    {
+        var actual = Translate<TestUser, string>("(u) => u.Name ?? 'anon'");
+        var fn = actual.Compile();
+        Assert.Equal("alice", fn(new TestUser { Name = "alice" }));
+        Assert.Equal("anon", fn(new TestUser { Name = null! }));
+    }
+
+    // --- Optional Chaining (`?.`) ---
+
+    [Fact]
+    public void OptionalChain_SingleHop_PropertyAccess_CompilesAndRuns()
+    {
+        var expr = Translate<TestUser, string?>("(u) => u.Address?.City");
+        var fn = expr.Compile();
+        Assert.Equal("Vienna", fn(new TestUser { Address = new TestAddress { City = "Vienna" } }));
+        Assert.Null(fn(new TestUser { Address = null }));
+    }
+
+    [Fact]
+    public void OptionalChain_InPredicate_WithCoalesce()
+    {
+        var expr = Translate<TestUser, bool>("(u) => (u.Address?.City ?? '') === 'Vienna'");
+        var fn = expr.Compile();
+        Assert.True(fn(new TestUser { Address = new TestAddress { City = "Vienna" } }));
+        Assert.False(fn(new TestUser { Address = null }));
+    }
+
+    [Fact]
+    public void OptionalChain_DeepChain_ShortCircuits()
+    {
+        // `u.Address?.City` — Address null should short-circuit past the .City access.
+        var expr = Translate<TestUser, bool>("(u) => u.Address?.City.startsWith('V') === true");
+        var fn = expr.Compile();
+        Assert.True(fn(new TestUser { Address = new TestAddress { City = "Vienna" } }));
+        Assert.False(fn(new TestUser { Address = null }));
+    }
+
+    [Fact]
+    public void OptionalChain_MethodCall_ShortCircuits()
+    {
+        var expr = Translate<TestUser, bool>("(u) => u.Address?.City.startsWith('V') === true");
+        var fn = expr.Compile();
+        Assert.True(fn(new TestUser { Address = new TestAddress { City = "Vienna" } }));
+        Assert.False(fn(new TestUser { Address = null }));
+    }
+
+    [Fact]
+    public void OptionalChain_NonNullableValueTypeGuard_IsSkipped()
+    {
+        // `u.Id?.ToString()` — Id is Guid (non-nullable value type); the guard reduces
+        // away and we get the plain method call. Just assert it translates without throwing.
+        var expr = Translate<TestUser, string?>("(u) => u.Id?.ToString()");
+        var fn = expr.Compile();
+        var id = Guid.NewGuid();
+        Assert.Equal(id.ToString(), fn(new TestUser { Id = id }));
+    }
 }

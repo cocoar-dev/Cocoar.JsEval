@@ -35,7 +35,11 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton(builder.Options);
         services.TryAddSingleton<IJsModuleRegistry>(builder.ModuleRegistry);
-        services.AddTransient<JsEngine>(sp => new JsEngine(
+        // Scoped, not Transient: Jint engines are not thread-safe, and multiple
+        // services resolving JsEngine in the same request should share one engine
+        // so globals set via SetValue are visible across them. Consumers that
+        // need an isolated engine can construct one explicitly with `new JsEngine(...)`.
+        services.AddScoped<JsEngine>(sp => new JsEngine(
             sp,
             sp.GetRequiredService<IJsModuleRegistry>(),
             sp.GetRequiredService<JsEngineOptions>(),

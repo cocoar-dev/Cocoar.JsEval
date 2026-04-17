@@ -140,3 +140,5 @@ services.AddJsEval(b => b
 // TypeScript transpiler (separate registration)
 services.AddTsTranspiler();
 ```
+
+`JsEngine` is registered with **scoped** lifetime (since v3.1) — one engine per DI scope, shared across every service that injects it. Jint is not thread-safe, and collaborators in the same scope need a consistent view of globals set via `SetValue`.

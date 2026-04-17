@@ -121,6 +121,7 @@ public static class JsExpressionTranslator
         Identifier id                  => VisitIdentifier(id, ctx),
         AstMember me                   => VisitMember(me, ctx),
         CallExpression ce              => VisitCall(ce, ctx),
+        ChainExpression ch             => VisitChain(ch, ctx),
         StringLiteral sl               => LinqExpr.Constant(sl.Value),
         NumericLiteral nl              => LinqExpr.Constant(nl.Value),
         BooleanLiteral bl              => LinqExpr.Constant(bl.Value),
@@ -188,6 +189,11 @@ public static class JsExpressionTranslator
             return interception!;
 
         var target = Visit((AstExpr)callee.Object, ctx);
+        return VisitCallOnTarget(target, callee, ce, ctx);
+    }
+
+    private static LinqExpr VisitCallOnTarget(LinqExpr target, AstMember callee, CallExpression ce, Context ctx)
+    {
         if (callee.Property is not Identifier methodId)
             throw new NotSupportedException("Computed method access not supported");
 
@@ -218,6 +224,78 @@ public static class JsExpressionTranslator
                 $"Method '{methodId.Name}' not found on {target.Type.Name} with {args.Length} arg(s)");
         return LinqExpr.Call(target, method, args);
     }
+
+    /// <summary>
+    /// Translates a JS optional-chain expression (<c>a?.b.c</c>, <c>a.b?.c.d</c>,
+    /// <c>a?.b()</c>). Each <c>Optional = true</c> node in the chain contributes a
+    /// null-guard on the immediately-preceding value; if any guard is null the whole
+    /// chain short-circuits to <c>null</c>. Result type is the nullable form of what
+    /// the chain would otherwise evaluate to.
+    /// </summary>
+    private static LinqExpr VisitChain(ChainExpression ch, Context ctx)
+    {
+        var guards = new List<LinqExpr>();
+        var body = VisitChainElement((AstExpr)ch.Expression, ctx, guards);
+
+        var resultType = MakeNullable(body.Type);
+        if (body.Type != resultType)
+            body = LinqExpr.Convert(body, resultType);
+
+        LinqExpr result = body;
+        // Guards are collected outer-first (guards[0] is the outermost target, e.g. `a`
+        // in `a?.b?.c`). Wrap from inner to outer so the outermost guard ends up
+        // at the top of the conditional tree:
+        //     a == null ? null : (a.b == null ? null : a.b.c)
+        for (var i = guards.Count - 1; i >= 0; i--)
+            result = BuildNullGuard(guards[i], result, resultType);
+        return result;
+    }
+
+    private static LinqExpr VisitChainElement(AstExpr node, Context ctx, List<LinqExpr> guards)
+    {
+        switch (node)
+        {
+            case AstMember me:
+            {
+                var obj = VisitChainElement((AstExpr)me.Object, ctx, guards);
+                if (me.Optional) guards.Add(obj);
+                var propName = ResolveMemberName(me);
+                var prop = ReflectionCache.GetProperty(obj.Type, propName)
+                    ?? throw new InvalidOperationException($"Property '{propName}' not found on {obj.Type.Name}");
+                return LinqExpr.Property(obj, prop);
+            }
+            case CallExpression ce:
+            {
+                if (ce.Optional)
+                    throw new NotSupportedException(
+                        "Optional call on a value (`x?.()`) is not supported. " +
+                        "Use optional member access (`x?.method()`) instead.");
+                if (ce.Callee is not AstMember callee)
+                    throw new NotSupportedException("Only method calls on members supported");
+                var target = VisitChainElement((AstExpr)callee.Object, ctx, guards);
+                if (callee.Optional) guards.Add(target);
+                return VisitCallOnTarget(target, callee, ce, ctx);
+            }
+            default:
+                return Visit(node, ctx);
+        }
+    }
+
+    private static LinqExpr BuildNullGuard(LinqExpr guard, LinqExpr onNonNull, Type resultType)
+    {
+        // Non-nullable value type guards can never be null — skip the wrap.
+        if (guard.Type.IsValueType && Nullable.GetUnderlyingType(guard.Type) == null)
+            return onNonNull;
+
+        var guardIsNull = LinqExpr.Equal(guard, LinqExpr.Constant(null, guard.Type));
+        var nullResult = LinqExpr.Constant(null, resultType);
+        return LinqExpr.Condition(guardIsNull, nullResult, onNonNull);
+    }
+
+    private static Type MakeNullable(Type t)
+        => t.IsValueType && Nullable.GetUnderlyingType(t) == null
+            ? typeof(Nullable<>).MakeGenericType(t)
+            : t;
 
     /// <summary>
     /// Recognizes <c>linq.*</c> patterns and emits a typed <see cref="ConstantExpression"/>.
@@ -377,10 +455,33 @@ public static class JsExpressionTranslator
         var right = Visit((AstExpr)le.Right, ctx);
         return le.Operator switch
         {
-            Operator.LogicalAnd => LinqExpr.AndAlso(left, right),
-            Operator.LogicalOr  => LinqExpr.OrElse(left, right),
+            Operator.LogicalAnd        => LinqExpr.AndAlso(left, right),
+            Operator.LogicalOr         => LinqExpr.OrElse(left, right),
+            Operator.NullishCoalescing => BuildCoalesce(left, right),
             _ => throw new NotSupportedException($"Logical operator {le.Operator} not supported")
         };
+    }
+
+    /// <summary>
+    /// Builds a <c>??</c> expression. <see cref="LinqExpr.Coalesce"/> requires the
+    /// left side to be a reference type or <see cref="Nullable{T}"/>; if a non-nullable
+    /// value-type left-hand side slips through (typically impossible from JS source,
+    /// but possible through closure-bound values), the expression reduces to
+    /// <c>left</c> — it can never be null.
+    /// </summary>
+    private static LinqExpr BuildCoalesce(LinqExpr left, LinqExpr right)
+    {
+        if (left.Type.IsValueType && Nullable.GetUnderlyingType(left.Type) == null)
+            return left;
+        if (left.Type != right.Type)
+        {
+            var leftNonNull = Nullable.GetUnderlyingType(left.Type) ?? left.Type;
+            if (right.Type == leftNonNull)
+                return LinqExpr.Coalesce(left, right);
+            if (leftNonNull.IsAssignableFrom(right.Type))
+                return LinqExpr.Coalesce(left, LinqExpr.Convert(right, leftNonNull));
+        }
+        return LinqExpr.Coalesce(left, right);
     }
 
     private static LinqExpr VisitUnary(AstUnary ue, Context ctx)

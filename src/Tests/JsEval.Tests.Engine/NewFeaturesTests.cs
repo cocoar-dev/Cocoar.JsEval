@@ -505,14 +505,22 @@ export const guid = common.Guid.New();
     }
 
     [Fact]
-    public void JsEngine_EachResolveCreatesNewInstance()
+    public void JsEngine_IsScoped_SharedWithinScope_DistinctAcrossScopes()
     {
         using var sp = BuildServiceProvider();
 
-        using var engine1 = sp.GetRequiredService<JsEngine>();
-        using var engine2 = sp.GetRequiredService<JsEngine>();
+        // Within a single scope, multiple services that depend on JsEngine share the
+        // same instance — crucial because Jint is not thread-safe and because
+        // globals set via SetValue should be visible across collaborators.
+        using var scope1 = sp.CreateScope();
+        var engine1a = scope1.ServiceProvider.GetRequiredService<JsEngine>();
+        var engine1b = scope1.ServiceProvider.GetRequiredService<JsEngine>();
+        Assert.Same(engine1a, engine1b);
 
-        Assert.NotSame(engine1, engine2);
+        // Across scopes, fresh instances.
+        using var scope2 = sp.CreateScope();
+        var engine2 = scope2.ServiceProvider.GetRequiredService<JsEngine>();
+        Assert.NotSame(engine1a, engine2);
     }
 
     [Fact]
