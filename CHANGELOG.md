@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.1]
+
+### Changed
+- **`Cocoar.JsEval.Linq` — `bool?` → `bool` coercion in boolean contexts (JS-truthy semantics).** Optional chaining inside `Where(...)`-style predicates, negation (`!`), logical `&&` / `||`, and ternary test position no longer require an explicit `=== true`. The translator normalizes `Nullable<bool>` to `bool` by treating `null` as `false` at each boolean-context site — matching JS where `undefined`/`null` are falsy. Concretely: `where(p => p.Person?.Name.startsWith('A'))` now works (v3.1.0 required `=== true`), and `where(p => !p.Person?.Name.startsWith('A'))` correctly returns rows where `Person` is null (JS: `!undefined === true`). Non-nullable `bool` operands pass through unchanged — zero impact on existing predicates without optional chaining.
+
 ## [3.1.0]
 
 ### Added

@@ -36,7 +36,15 @@ public static class JsExpressionTranslator
     {
         var (parameter, body) = TranslateCore(function, typeof(T), engine, options);
         if (body.Type != typeof(TResult))
-            body = LinqExpr.Convert(body, typeof(TResult));
+        {
+            // `bool?` → `bool` in a boolean-returning lambda: treat null as false
+            // (JS-truthy semantics). Mirrors writing `== true` explicitly in C# —
+            // the form you'd be forced into anyway to use `?.` inside Where(…).
+            if (typeof(TResult) == typeof(bool) && body.Type == typeof(bool?))
+                body = NormalizeToBool(body);
+            else
+                body = LinqExpr.Convert(body, typeof(TResult));
+        }
         return LinqExpr.Lambda<Func<T, TResult>>(body, parameter);
     }
 
@@ -455,8 +463,8 @@ public static class JsExpressionTranslator
         var right = Visit((AstExpr)le.Right, ctx);
         return le.Operator switch
         {
-            Operator.LogicalAnd        => LinqExpr.AndAlso(left, right),
-            Operator.LogicalOr         => LinqExpr.OrElse(left, right),
+            Operator.LogicalAnd        => LinqExpr.AndAlso(NormalizeToBool(left), NormalizeToBool(right)),
+            Operator.LogicalOr         => LinqExpr.OrElse(NormalizeToBool(left), NormalizeToBool(right)),
             Operator.NullishCoalescing => BuildCoalesce(left, right),
             _ => throw new NotSupportedException($"Logical operator {le.Operator} not supported")
         };
@@ -489,7 +497,7 @@ public static class JsExpressionTranslator
         var operand = Visit((AstExpr)ue.Argument, ctx);
         return ue.Operator switch
         {
-            Operator.LogicalNot    => LinqExpr.Not(operand),
+            Operator.LogicalNot    => LinqExpr.Not(NormalizeToBool(operand)),
             Operator.UnaryNegation => NegateOrFold(operand),
             Operator.UnaryPlus     => operand,
             _ => throw new NotSupportedException($"Unary operator {ue.Operator} not supported")
@@ -523,11 +531,26 @@ public static class JsExpressionTranslator
 
     private static LinqExpr VisitConditional(AstConditional cond, Context ctx)
     {
-        var test = Visit((AstExpr)cond.Test, ctx);
+        var test = NormalizeToBool(Visit((AstExpr)cond.Test, ctx));
         var ifTrue = Visit((AstExpr)cond.Consequent, ctx);
         var ifFalse = Visit((AstExpr)cond.Alternate, ctx);
         return LinqExpr.Condition(test, ifTrue, ifFalse);
     }
+
+    /// <summary>
+    /// Converts a <see cref="Nullable{Boolean}"/> expression into a <see cref="bool"/>
+    /// with JS-truthy semantics: <c>null</c> is treated as <c>false</c>. Non-nullable
+    /// <c>bool</c> is passed through. Used at every boolean-context site (lambda
+    /// body, <c>!</c>, <c>&amp;&amp;</c>, <c>||</c>, ternary test) so optional
+    /// chaining inside those contexts behaves the same as in JS — <c>null/undefined
+    /// → false</c> — without requiring an explicit <c>=== true</c> in the source.
+    /// Emits the same expression the C# compiler produces for <c>x == true</c> on
+    /// a <see cref="Nullable{Boolean}"/>: maximum provider compatibility.
+    /// </summary>
+    private static LinqExpr NormalizeToBool(LinqExpr e)
+        => e.Type == typeof(bool?)
+            ? LinqExpr.Equal(e, LinqExpr.Constant(true, typeof(bool?)))
+            : e;
 
     /// <summary>
     /// When a binary expression compares an enum property to a string literal

@@ -699,4 +699,108 @@ public class TranslatorTests
         var id = Guid.NewGuid();
         Assert.Equal(id.ToString(), fn(new TestUser { Id = id }));
     }
+
+    // --- bool? → bool coercion in boolean contexts (JS-truthy semantics) ---
+    // In JS, `undefined` / `null` are falsy. C# forces `?.` predicates into explicit
+    // `=== true`. The translator normalizes at every boolean-context site so scripts
+    // can be written naturally.
+
+    // Dataset covering all three cases for `u.Address?.City.startsWith('V')`:
+    //   - Address with "Vienna"  → startsWith returns true
+    //   - Address with "Berlin"  → startsWith returns false
+    //   - Address is null        → chain short-circuits to null (JS: falsy)
+    private static readonly TestUser VieUser    = new() { Name = "v", IsActive = true,  Address = new TestAddress { City = "Vienna" } };
+    private static readonly TestUser VieInact   = new() { Name = "v", IsActive = false, Address = new TestAddress { City = "Vienna" } };
+    private static readonly TestUser BerUser    = new() { Name = "b", IsActive = true,  Address = new TestAddress { City = "Berlin" } };
+    private static readonly TestUser BerInact   = new() { Name = "b", IsActive = false, Address = new TestAddress { City = "Berlin" } };
+    private static readonly TestUser NoAddr     = new() { Name = "n", IsActive = true,  Address = null };
+    private static readonly TestUser NoAddrInact= new() { Name = "n", IsActive = false, Address = null };
+
+    [Fact]
+    public void Bool_Nullable_Body_InPredicate_NullIsFalse()
+    {
+        // Final body is bool?; the outer-body normalization turns null → false.
+        var expr = Translate<TestUser, bool>("(u) => u.Address?.City.startsWith('V')");
+        var fn = expr.Compile();
+        Assert.True(fn(VieUser));
+        Assert.False(fn(BerUser));
+        Assert.False(fn(NoAddr));     // null → false
+    }
+
+    [Fact]
+    public void Bool_Nullable_UnderNot_NullIsTrue()
+    {
+        // `!x` in JS: `!undefined === true`. Without the per-operand normalization,
+        // `Expression.Not(bool?.null)` would lift to null — and our outer check
+        // `== true` would then say false, flipping the JS semantics.
+        var expr = Translate<TestUser, bool>("(u) => !u.Address?.City.startsWith('V')");
+        var fn = expr.Compile();
+        Assert.False(fn(VieUser));    // !true
+        Assert.True(fn(BerUser));     // !false
+        Assert.True(fn(NoAddr));      // !undefined → true (JS-truthy)
+    }
+
+    [Fact]
+    public void Bool_Nullable_InAndAlso_NullShortCircuitsToFalse()
+    {
+        var expr = Translate<TestUser, bool>("(u) => u.Address?.City.startsWith('V') && u.IsActive");
+        var fn = expr.Compile();
+        Assert.True (fn(VieUser));     // true && true
+        Assert.False(fn(VieInact));    // true && false
+        Assert.False(fn(BerUser));     // false && true
+        Assert.False(fn(NoAddr));      // null → false
+    }
+
+    [Fact]
+    public void Bool_Nullable_InOrElse_NullIsFalse()
+    {
+        var expr = Translate<TestUser, bool>("(u) => u.Address?.City.startsWith('V') || u.IsActive");
+        var fn = expr.Compile();
+        Assert.True (fn(VieUser));     // true  || true
+        Assert.True (fn(VieInact));    // true  || false
+        Assert.True (fn(BerUser));     // false || true
+        Assert.False(fn(BerInact));    // false || false
+        Assert.True (fn(NoAddr));      // null(→false) || true
+        Assert.False(fn(NoAddrInact)); // null(→false) || false
+    }
+
+    [Fact]
+    public void Bool_Nullable_AsTernaryTest_NullIsFalse()
+    {
+        var expr = Translate<TestUser, int>("(u) => u.Address?.City.startsWith('V') ? 1 : 2");
+        var fn = expr.Compile();
+        Assert.Equal(1, fn(VieUser));
+        Assert.Equal(2, fn(BerUser));
+        Assert.Equal(2, fn(NoAddr));   // null → false → ifFalse branch
+    }
+
+    [Fact]
+    public void Bool_Nullable_Body_Queryable_Where()
+    {
+        // End-to-end: the translated expression flows through IQueryable.Where just
+        // like a hand-written `== true` predicate.
+        var users = new[] { VieUser, BerUser, NoAddr }.AsQueryable();
+        var expr = Translate<TestUser, bool>("(u) => u.Address?.City.startsWith('V')");
+        var result = users.Where(expr).ToList();
+        Assert.Single(result);
+        Assert.Same(VieUser, result[0]);
+    }
+
+    [Fact]
+    public void Bool_NonNullable_Passthrough_StillWorks()
+    {
+        // Regression: NormalizeToBool must be a no-op for plain bool — the existing
+        // matrix of "u => u.IsActive", "a && b" etc. should produce identical trees.
+        Expression<Func<TestUser, bool>> baseline = u => u.IsActive && u.Age > 18;
+        var actual = Translate<TestUser, bool>("(u) => u.IsActive && u.Age > 18");
+        Assert.Equal(baseline.ToString(), actual.ToString());
+    }
+
+    [Fact]
+    public void Bool_NonNullable_Not_Passthrough()
+    {
+        Expression<Func<TestUser, bool>> baseline = u => !u.IsActive;
+        var actual = Translate<TestUser, bool>("(u) => !u.IsActive");
+        Assert.Equal(baseline.ToString(), actual.ToString());
+    }
 }
