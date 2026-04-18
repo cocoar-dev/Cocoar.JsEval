@@ -4,8 +4,14 @@ All notable changes to this project are documented in this file. For the authori
 
 ## [3.1.1]
 
+### Fixed
+- **Optional chaining in LINQ provider predicates (Marten / EF Core / LINQ2DB).** v3.1.0 emitted nested `ConditionalExpression` nodes (one per `?.` guard), which Marten refused with `BadLinqExpressionException`. Verified end-to-end in all three sandbox projects (Marten + Postgres, EF Core + SQLite, LINQ2DB + SQLite) against the two real-world rollback cases from a downstream authorization project — natural v3.1.1, v3.1.0 `=== true` style, and hand-rolled workaround all return identical rows on every provider.
+
 ### Changed
-- **`Cocoar.JsEval.Linq` — `bool?` → `bool` coercion in boolean contexts (JS-truthy semantics).** Optional chaining inside `Where(...)`-style predicates, negation (`!`), logical `&&` / `||`, and ternary test position no longer require an explicit `=== true`. The translator normalizes `Nullable<bool>` to `bool` by treating `null` as `false` at each boolean-context site — matching JS where `undefined`/`null` are falsy. `where(p => p.Person?.Name.startsWith('A'))` now works (v3.1.0 required `=== true`), and `where(p => !p.Person?.Name.startsWith('A'))` correctly returns rows where `Person` is null (JS: `!undefined === true`).
+- **Boolean-context optional chains flatten to pure `&&`-chains.** `where(p => p.Person?.Name.startsWith('A'))` produces `p.Person != null && p.Person.Name.StartsWith("A")` — zero `IIF` nodes, byte-identical to hand-written C#, translated natively by every mainstream LINQ provider.
+- **Optional chains in binary comparisons flatten too.** `(t) => t.Customer?.Id === linq.guid(...)` emits `t.Customer != null && t.Customer.Id == guid` — no IIF-inside-comparison. Applies to `==` / `<` / `<=` / `>` / `>=` when the other operand is a known-non-null constant.
+- **Redundant `x === true` / `x === false` collapse.** `u.IsActive === true` → `u.IsActive`, `u.IsActive === false` → `!u.IsActive` (plain `bool` operands only — `bool?` keeps lifted semantics). Unlocks v3.1.0-style `=== true` scripts against Marten.
+- **`bool?` → `bool` coercion in boolean contexts (JS-truthy semantics).** Optional chaining inside `Where(...)`, negation (`!`), `&&` / `||`, and ternary test position no longer require an explicit `=== true`. `null` is treated as `false` at each boolean-context site. `where(p => !p.Person?.Name.startsWith('A'))` correctly returns rows where `Person` is null (JS: `!undefined === true`).
 
 ## [3.1.0]
 

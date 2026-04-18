@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Cocoar.JsEval.EfCore.Sandbox;
+using Cocoar.JsEval.EfCore.Sandbox.Scenarios;
 using Cocoar.JsEval.Linq;
 using Cocoar.JsEval.Linq.Dependencies;
 using Jint;
@@ -121,6 +122,10 @@ await Run("3. Dependency tracking: reactive re-run matrix", async db =>
     }
     await Task.CompletedTask;
 });
+
+await using (var seedDb = new AppDb(options))
+    await OptionalChainingScenario.Seed(seedDb);
+await Run("4. Optional chaining against EF Core (v3.1.0 regression case)", OptionalChainingScenario.Run);
 
 Console.WriteLine();
 Console.WriteLine("=== DONE ===");

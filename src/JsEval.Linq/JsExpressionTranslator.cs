@@ -235,28 +235,46 @@ public static class JsExpressionTranslator
 
     /// <summary>
     /// Translates a JS optional-chain expression (<c>a?.b.c</c>, <c>a.b?.c.d</c>,
-    /// <c>a?.b()</c>). Each <c>Optional = true</c> node in the chain contributes a
-    /// null-guard on the immediately-preceding value; if any guard is null the whole
-    /// chain short-circuits to <c>null</c>. Result type is the nullable form of what
-    /// the chain would otherwise evaluate to.
+    /// <c>a?.b()</c>). All <c>Optional = true</c> nodes in the chain contribute
+    /// null-guards on their immediately-preceding value; if any guard is null the
+    /// whole chain short-circuits to <c>null</c>.
+    ///
+    /// All guards are combined into a **single** positive <see cref="LinqExpr.Condition"/>
+    /// (<c>g1 != null &amp;&amp; g2 != null ? body : null</c>) instead of nested
+    /// per-guard <c>IIF</c>s. Most LINQ providers (Marten in particular) refuse
+    /// nested <see cref="ConditionalExpression"/> with null constants inside Where
+    /// clauses — a flat shape is the portable form. When the caller pulls the chain
+    /// into a boolean context, <see cref="NormalizeToBool"/> rewrites this further
+    /// to a pure <c>&amp;&amp;</c>-chain (no <c>IIF</c> at all).
     /// </summary>
     private static LinqExpr VisitChain(ChainExpression ch, Context ctx)
     {
         var guards = new List<LinqExpr>();
         var body = VisitChainElement((AstExpr)ch.Expression, ctx, guards);
 
+        // Non-nullable value-type guards (Guid, int, …) can never be null — skip
+        // them so we don't bloat the query with `x != null` checks the provider
+        // would just constant-fold to `true` anyway.
+        var realGuards = new List<LinqExpr>(guards.Count);
+        foreach (var g in guards)
+            if (!(g.Type.IsValueType && Nullable.GetUnderlyingType(g.Type) == null))
+                realGuards.Add(g);
+
+        if (realGuards.Count == 0)
+            return body;
+
+        var allGuardsNonNull = realGuards
+            .Select(g => (LinqExpr)LinqExpr.NotEqual(g, LinqExpr.Constant(null, g.Type)))
+            .Aggregate(LinqExpr.AndAlso);
+
         var resultType = MakeNullable(body.Type);
         if (body.Type != resultType)
             body = LinqExpr.Convert(body, resultType);
 
-        LinqExpr result = body;
-        // Guards are collected outer-first (guards[0] is the outermost target, e.g. `a`
-        // in `a?.b?.c`). Wrap from inner to outer so the outermost guard ends up
-        // at the top of the conditional tree:
-        //     a == null ? null : (a.b == null ? null : a.b.c)
-        for (var i = guards.Count - 1; i >= 0; i--)
-            result = BuildNullGuard(guards[i], result, resultType);
-        return result;
+        return LinqExpr.Condition(
+            allGuardsNonNull,
+            body,
+            LinqExpr.Constant(null, resultType));
     }
 
     private static LinqExpr VisitChainElement(AstExpr node, Context ctx, List<LinqExpr> guards)
@@ -287,17 +305,6 @@ public static class JsExpressionTranslator
             default:
                 return Visit(node, ctx);
         }
-    }
-
-    private static LinqExpr BuildNullGuard(LinqExpr guard, LinqExpr onNonNull, Type resultType)
-    {
-        // Non-nullable value type guards can never be null — skip the wrap.
-        if (guard.Type.IsValueType && Nullable.GetUnderlyingType(guard.Type) == null)
-            return onNonNull;
-
-        var guardIsNull = LinqExpr.Equal(guard, LinqExpr.Constant(null, guard.Type));
-        var nullResult = LinqExpr.Constant(null, resultType);
-        return LinqExpr.Condition(guardIsNull, nullResult, onNonNull);
     }
 
     private static Type MakeNullable(Type t)
@@ -437,6 +444,30 @@ public static class JsExpressionTranslator
     {
         var left = Visit((AstExpr)nbe.Left, ctx);
         var right = Visit((AstExpr)nbe.Right, ctx);
+
+        // Redundant bool-constant comparison: `x === true` → `x`, `x === false` → `!x`,
+        // `x !== true` → `!x`, `x !== false` → `x`. Marten (and some other providers)
+        // can't translate shapes like `StartsWith("x") == True`, but handle plain
+        // `StartsWith("x")` fine — the optimization is safe semantic and broadly
+        // improves provider compatibility, not just chain-related scripts.
+        if (TrySimplifyBoolConstComparison(left, right, nbe.Operator, out var simplified))
+            return simplified!;
+
+        // Optional-chain shape `IIF(test, body, null) op KnownNonNullConst` flattens
+        // to `test && body op KnownNonNullConst` for equality / ordering operators.
+        // LINQ providers (Marten specifically) choke on any Conditional used as the
+        // operand of a binary comparison — they refuse to handle the inner logical
+        // test. The flattened form is strictly more translatable and semantically
+        // equivalent: a null left-hand side yields `false` for these operators,
+        // which is exactly what `test && …` produces when `test` is false.
+        if (IsNullFlattenableComparison(nbe.Operator))
+        {
+            if (TryFlattenChainComparison(left, right, nbe.Operator, out var flatFromLeft))
+                return flatFromLeft!;
+            if (TryFlattenChainComparison(right, left, FlipSides(nbe.Operator), out var flatFromRight))
+                return flatFromRight!;
+        }
+
         (left, right) = CoerceEnumComparison(left, right);
         if (ctx.Options.CoerceNumericLiterals)
             (left, right) = CoerceNumeric(left, right);
@@ -456,6 +487,115 @@ public static class JsExpressionTranslator
             _ => throw new NotSupportedException($"Binary operator {nbe.Operator} not supported")
         };
     }
+
+    /// <summary>
+    /// Operators for which `null op nonNullConst` evaluates to <c>false</c> in
+    /// CLR lifted semantics — which matches `false && …`, so flattening is
+    /// semantically safe. Excludes <c>!=</c> (null != x is <c>true</c>, needs a
+    /// different lowering — not implemented).
+    /// </summary>
+    private static bool IsNullFlattenableComparison(Operator op) => op switch
+    {
+        Operator.Equality or Operator.StrictEquality => true,
+        Operator.LessThan or Operator.LessThanOrEqual => true,
+        Operator.GreaterThan or Operator.GreaterThanOrEqual => true,
+        _ => false
+    };
+
+    private static Operator FlipSides(Operator op) => op switch
+    {
+        Operator.LessThan             => Operator.GreaterThan,
+        Operator.LessThanOrEqual      => Operator.GreaterThanOrEqual,
+        Operator.GreaterThan          => Operator.LessThan,
+        Operator.GreaterThanOrEqual   => Operator.LessThanOrEqual,
+        _ => op, // equality / strict-equality are symmetric
+    };
+
+    private static bool TryFlattenChainComparison(LinqExpr chainCandidate, LinqExpr other, Operator op, out LinqExpr? result)
+    {
+        result = null;
+        if (chainCandidate is not System.Linq.Expressions.ConditionalExpression ce
+            || ce.IfFalse is not ConstantExpression { Value: null })
+            return false;
+
+        if (!IsKnownNonNull(other)) return false;
+
+        // Strip the nullable lifts so the comparison happens at the natural type —
+        // keeps the SQL shape clean and matches the form Marten / EF / LINQ2DB
+        // translate out of the box.
+        var chainBody = UnwrapNullableLift(ce.IfTrue);
+        var otherUnwrapped = UnwrapNullableLift(other);
+        if (chainBody.Type != otherUnwrapped.Type)
+            return false;
+
+        var comparison = BuildComparison(chainBody, otherUnwrapped, op);
+        result = LinqExpr.AndAlso(ce.Test, comparison);
+        return true;
+    }
+
+    private static LinqExpr BuildComparison(LinqExpr l, LinqExpr r, Operator op)
+    {
+        if (TrySimplifyBoolConstComparison(l, r, op, out var simplified))
+            return simplified!;
+        return op switch
+        {
+            Operator.Equality or Operator.StrictEquality => LinqExpr.Equal(l, r),
+            Operator.LessThan                            => LinqExpr.LessThan(l, r),
+            Operator.LessThanOrEqual                     => LinqExpr.LessThanOrEqual(l, r),
+            Operator.GreaterThan                         => LinqExpr.GreaterThan(l, r),
+            Operator.GreaterThanOrEqual                  => LinqExpr.GreaterThanOrEqual(l, r),
+            _ => throw new InvalidOperationException($"BuildComparison does not handle {op}")
+        };
+    }
+
+    /// <summary>
+    /// Collapses `boolExpr === true`, `boolExpr === false`, `boolExpr !== true`,
+    /// `boolExpr !== false` (in either operand order) to the minimal equivalent
+    /// <c>boolExpr</c> or <c>!boolExpr</c>. Only fires when the non-constant side
+    /// is already <see cref="bool"/> — doesn't touch <see cref="Nullable{Boolean}"/>
+    /// where the comparison has meaningful lifted semantics. Provider compatibility
+    /// win: several LINQ providers can translate <c>StartsWith("x")</c> but not
+    /// <c>StartsWith("x") == true</c>.
+    /// </summary>
+    private static bool TrySimplifyBoolConstComparison(LinqExpr left, LinqExpr right, Operator op, out LinqExpr? result)
+    {
+        result = null;
+        var isEq = op is Operator.Equality or Operator.StrictEquality;
+        var isNeq = op is Operator.Inequality or Operator.StrictInequality;
+        if (!isEq && !isNeq) return false;
+
+        if (TryMatchBoolConstSide(left, right, out var boolSide, out var constVal) ||
+            TryMatchBoolConstSide(right, left, out boolSide, out constVal))
+        {
+            var wantTrue = isEq ? constVal : !constVal;
+            result = wantTrue ? boolSide! : LinqExpr.Not(boolSide!);
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryMatchBoolConstSide(LinqExpr maybeConst, LinqExpr other, out LinqExpr? boolSide, out bool constVal)
+    {
+        boolSide = null;
+        constVal = false;
+        if (maybeConst is ConstantExpression { Value: bool b } && other.Type == typeof(bool))
+        {
+            boolSide = other;
+            constVal = b;
+            return true;
+        }
+        return false;
+    }
+
+    private static LinqExpr UnwrapNullableLift(LinqExpr e)
+        => e is System.Linq.Expressions.UnaryExpression { NodeType: ExpressionType.Convert } u
+           && Nullable.GetUnderlyingType(u.Type) is Type underlying
+           && underlying == u.Operand.Type
+            ? u.Operand
+            : e;
+
+    private static bool IsKnownNonNull(LinqExpr e)
+        => UnwrapNullableLift(e) is ConstantExpression { Value: not null };
 
     private static LinqExpr VisitLogical(LogicalExpression le, Context ctx)
     {
@@ -544,12 +684,42 @@ public static class JsExpressionTranslator
     /// body, <c>!</c>, <c>&amp;&amp;</c>, <c>||</c>, ternary test) so optional
     /// chaining inside those contexts behaves the same as in JS — <c>null/undefined
     /// → false</c> — without requiring an explicit <c>=== true</c> in the source.
-    /// Emits the same expression the C# compiler produces for <c>x == true</c> on
-    /// a <see cref="Nullable{Boolean}"/>: maximum provider compatibility.
+    ///
+    /// Special-cases the optional-chain shape
+    /// <c>Condition(test, Convert(boolBody, bool?), Constant(null))</c> emitted by
+    /// <see cref="VisitChain"/>: rewrites it to <c>test &amp;&amp; boolBody</c> — a
+    /// pure bool expression with zero <c>IIF</c> nodes. This is what a C# author
+    /// would hand-write for a null-safe predicate, and — critically — it's the only
+    /// form Marten's <c>WhereClauseParser</c> reliably translates (nested
+    /// <see cref="ConditionalExpression"/> with <c>null</c> constants throws there).
+    /// The generic fallback emits <c>x == true</c>, byte-identical to the C#
+    /// compiler's output for an explicit <c>== true</c> on a <c>bool?</c>.
     /// </summary>
     private static LinqExpr NormalizeToBool(LinqExpr e)
-        => e.Type == typeof(bool?)
-            ? LinqExpr.Equal(e, LinqExpr.Constant(true, typeof(bool?)))
+    {
+        if (e.Type != typeof(bool?)) return e;
+
+        if (e is System.Linq.Expressions.ConditionalExpression { IfFalse: ConstantExpression { Value: null } } ce)
+        {
+            var body = UnwrapBoolLift(ce.IfTrue);
+            if (body.Type == typeof(bool))
+                return LinqExpr.AndAlso(ce.Test, body);
+        }
+
+        return LinqExpr.Equal(e, LinqExpr.Constant(true, typeof(bool?)));
+    }
+
+    /// <summary>
+    /// If <paramref name="e"/> is <c>Convert(x, Nullable&lt;bool&gt;)</c> where
+    /// <c>x</c> is already <c>bool</c>, returns <c>x</c> unwrapped. Otherwise
+    /// returns <paramref name="e"/> as-is. Used to peel the lift that
+    /// <see cref="VisitChain"/> applies so boolean bodies re-surface as plain
+    /// <c>bool</c> in the rewritten expression.
+    /// </summary>
+    private static LinqExpr UnwrapBoolLift(LinqExpr e)
+        => e is System.Linq.Expressions.UnaryExpression { NodeType: ExpressionType.Convert } u
+           && u.Type == typeof(bool?) && u.Operand.Type == typeof(bool)
+            ? u.Operand
             : e;
 
     /// <summary>

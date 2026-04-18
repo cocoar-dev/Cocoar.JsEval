@@ -13,8 +13,55 @@ public class User
     public string Zip { get; set; } = "";
 }
 
+// Nested-navigation models for the optional-chaining scenario.
+// Author --(optional)--> Person; Todo --(optional)--> Customer.
+public class Author
+{
+    public int Id { get; set; }
+    public string Type { get; set; } = "";   // "Person" | "Company"
+    public bool IsActive { get; set; }
+    public int? PersonId { get; set; }
+    public Person? Person { get; set; }
+}
+
+public class Person
+{
+    public int Id { get; set; }
+    public string? Firstname { get; set; }
+    public string? Lastname { get; set; }
+}
+
+public class Todo
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = "";
+    public Guid? CustomerId { get; set; }
+    public Customer? Customer { get; set; }
+}
+
+public class Customer
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
 public class AppDb : DbContext
 {
     public AppDb(DbContextOptions<AppDb> options) : base(options) { }
     public DbSet<User> Users => Set<User>();
+    public DbSet<Author> Authors => Set<Author>();
+    public DbSet<Person> Persons => Set<Person>();
+    public DbSet<Todo> Todos => Set<Todo>();
+    public DbSet<Customer> Customers => Set<Customer>();
+
+    protected override void OnModelCreating(ModelBuilder mb)
+    {
+        mb.Entity<Author>()
+            .HasOne(a => a.Person).WithMany()
+            .HasForeignKey(a => a.PersonId);
+        mb.Entity<Todo>()
+            .HasOne(t => t.Customer).WithMany()
+            .HasForeignKey(t => t.CustomerId);
+        mb.Entity<Customer>().Property(c => c.Id).ValueGeneratedNever();
+    }
 }

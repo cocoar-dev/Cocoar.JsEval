@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Cocoar.JsEval.Linq;
 using Cocoar.JsEval.Linq.Dependencies;
 using Cocoar.JsEval.Marten.Sandbox;
+using Cocoar.JsEval.Marten.Sandbox.Scenarios;
 using Jint;
 using Marten;
 
@@ -178,6 +179,9 @@ await Run("5. Dependency tracking: which properties does the script touch?", ses
             Console.WriteLine($"  change '{prop,-14}' -> re-run? {(deps.DependsOn(prop) ? "YES" : "no ")}");
     }
 });
+
+await OptionalChainingScenario.Seed(store);
+await Run("6. Optional chaining against Marten (v3.1.0 regression case)", OptionalChainingScenario.Run);
 
 Console.WriteLine();
 Console.WriteLine("=== DONE ===");

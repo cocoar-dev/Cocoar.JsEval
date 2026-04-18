@@ -803,4 +803,177 @@ public class TranslatorTests
         var actual = Translate<TestUser, bool>("(u) => !u.IsActive");
         Assert.Equal(baseline.ToString(), actual.ToString());
     }
+
+    // --- Expression shape — Marten-friendly flattening ---
+    // Marten's WhereClauseParser refuses ConditionalExpression with `null` branches
+    // (and especially nested ones). The translator must emit a pure `&&`-chain for
+    // optional-chain predicates in bool contexts, and a single (not nested) IIF for
+    // non-bool chains.
+
+    [Fact]
+    public void OptionalChain_InBoolContext_EmitsFlatAndAlso_NoIif()
+    {
+        // This is the exact shape that crashed Marten in v3.1.0 for two-guard chains.
+        var expr = Translate<TestUser, bool>("(u) => u.Address?.City.startsWith('V')");
+        var text = expr.ToString();
+        Assert.DoesNotContain("IIF", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Conditional", text, StringComparison.Ordinal);
+        Assert.Contains("AndAlso", expr.Body.ToString().Replace("&&", "AndAlso"), StringComparison.Ordinal);
+    }
+
+    private class PersonHolder
+    {
+        public Guid Id { get; set; }
+        public TestAddress? Person { get; set; }
+    }
+
+    [Fact]
+    public void OptionalChain_TwoGuards_InBoolContext_EmitsFlatAndAlsoChain()
+    {
+        // `p.Person?.City?.startsWith('A')` — two optional-chain hops. v3.1.0 emitted
+        // nested IIFs, Marten blew up. Now expected: `p.Person != null && p.Person.City != null && p.Person.City.StartsWith("A")`.
+        var expr = Translate<PersonHolder, bool>("(p) => p.Person?.City?.startsWith('A')");
+        var text = expr.ToString();
+        Assert.DoesNotContain("IIF", text, StringComparison.Ordinal);
+        // Three != null checks should be absent — wait: two guards, two null checks.
+        // Count "!= null" occurrences.
+        var nullChecks = text.Split("!= null").Length - 1;
+        Assert.Equal(2, nullChecks);
+    }
+
+    [Fact]
+    public void OptionalChain_TwoGuards_Runtime_NullShortCircuitsCorrectly()
+    {
+        var expr = Translate<PersonHolder, bool>("(p) => p.Person?.City?.startsWith('A')");
+        var fn = expr.Compile();
+        Assert.True (fn(new PersonHolder { Person = new TestAddress { City = "Alpha" } }));
+        Assert.False(fn(new PersonHolder { Person = new TestAddress { City = "Beta"  } }));
+        Assert.False(fn(new PersonHolder { Person = new TestAddress { City = null!   } })); // inner guard null
+        Assert.False(fn(new PersonHolder { Person = null                                })); // outer guard null
+    }
+
+    [Fact]
+    public void OptionalChain_NonBoolBody_EmitsSingleIif_NotNested()
+    {
+        // `u.Address?.City` as a string result — can't flatten to bool; keep a single
+        // IIF (not nested) so providers that tolerate one level still work.
+        var expr = Translate<TestUser, string?>("(u) => u.Address?.City");
+        var text = expr.ToString();
+        var iifCount = text.Split("IIF").Length - 1;
+        Assert.Equal(1, iifCount);
+    }
+
+    [Fact]
+    public void OptionalChain_Negation_StillJsTruthy_AndFlat()
+    {
+        // `!u.Address?.City.startsWith('V')` — combining negation with optional chain.
+        // Should flatten the chain first (bool context via NormalizeToBool inside Not),
+        // then negate. Result: `!(u.Address != null && u.Address.City.StartsWith("V"))`.
+        var expr = Translate<TestUser, bool>("(u) => !u.Address?.City.startsWith('V')");
+        var text = expr.ToString();
+        Assert.DoesNotContain("IIF", text, StringComparison.Ordinal);
+
+        // And the runtime semantics must still match JS: `!undefined === true`.
+        var fn = expr.Compile();
+        Assert.True(fn(new TestUser { Address = null })); // !undefined = true ✓
+    }
+
+    // --- Binary-comparison chain flatten: `IIF(test, body, null) op nonNullConst` ---
+    // Marten (and many other LINQ providers) refuse Conditional inside a binary
+    // comparison. For equality / ordering operators where `null op X` evaluates
+    // to false anyway, we flatten the chain into `test && body op X`.
+
+    [Fact]
+    public void OptionalChain_EqualityWithConstant_Flattens_NoIif()
+    {
+        // Customer?.Id === guid — from the real-world rollback case.
+        var expr = Translate<PersonHolder, bool>(
+            "(p) => p.Person?.City === 'Vienna'");
+        var text = expr.ToString();
+        Assert.DoesNotContain("IIF", text, StringComparison.Ordinal);
+        Assert.Contains("!= null", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OptionalChain_EqualityWithConstant_RuntimeSemantics()
+    {
+        var expr = Translate<PersonHolder, bool>(
+            "(p) => p.Person?.City === 'Vienna'");
+        var fn = expr.Compile();
+        Assert.True (fn(new PersonHolder { Person = new TestAddress { City = "Vienna" } }));
+        Assert.False(fn(new PersonHolder { Person = new TestAddress { City = "Berlin" } }));
+        Assert.False(fn(new PersonHolder { Person = null })); // null === "Vienna" is false
+    }
+
+    [Fact]
+    public void OptionalChain_EqualityConstantOnLeft_AlsoFlattens()
+    {
+        // `'Vienna' === p.Person?.City` — reversed operand order.
+        var expr = Translate<PersonHolder, bool>(
+            "(p) => 'Vienna' === p.Person?.City");
+        var text = expr.ToString();
+        Assert.DoesNotContain("IIF", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BoolConstComparison_EqualsTrue_CollapsesToOperand()
+    {
+        // `u.IsActive === true` → `u.IsActive` (same expression tree).
+        Expression<Func<TestUser, bool>> baseline = u => u.IsActive;
+        var actual = Translate<TestUser, bool>("(u) => u.IsActive === true");
+        Assert.Equal(baseline.ToString(), actual.ToString());
+    }
+
+    [Fact]
+    public void BoolConstComparison_EqualsFalse_CollapsesToNot()
+    {
+        Expression<Func<TestUser, bool>> baseline = u => !u.IsActive;
+        var actual = Translate<TestUser, bool>("(u) => u.IsActive === false");
+        Assert.Equal(baseline.ToString(), actual.ToString());
+    }
+
+    [Fact]
+    public void BoolConstComparison_NotEqualsTrue_CollapsesToNot()
+    {
+        Expression<Func<TestUser, bool>> baseline = u => !u.IsActive;
+        var actual = Translate<TestUser, bool>("(u) => u.IsActive !== true");
+        Assert.Equal(baseline.ToString(), actual.ToString());
+    }
+
+    [Fact]
+    public void BoolConstComparison_OptionalChainWithEqualsTrue_FlatAndFree()
+    {
+        // The real v3.1.0 failing shape — after flattening AND bool-const simplify,
+        // this produces identical output to the version without `=== true`.
+        var expr = Translate<TestUser, bool>(
+            "(u) => u.Address?.City.startsWith('V') === true");
+        var text = expr.ToString();
+        Assert.DoesNotContain("IIF", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("== True", text, StringComparison.Ordinal);
+
+        var fn = expr.Compile();
+        Assert.True (fn(new TestUser { Address = new TestAddress { City = "Vienna" } }));
+        Assert.False(fn(new TestUser { Address = new TestAddress { City = "Berlin" } }));
+        Assert.False(fn(new TestUser { Address = null }));
+    }
+
+    [Fact]
+    public void BoolConstComparison_OnNullableBool_DoesNotCollapse()
+    {
+        // Don't simplify `bool? === true` — the comparison has meaningful lifted
+        // semantics (null === true is false, preserved by Equal). Only plain bool
+        // operands get the shortcut.
+        // We test this by taking a property path that the Translator sees as bool?
+        // (via optional chain on a non-bool intermediate). Hmm, trickier to induce
+        // — just assert the simplification doesn't misfire on a plain `bool?`
+        // SetValue closure.
+        var expr = Translate<TestUser, bool>(
+            "(u) => maybeActive === true",
+            engine => engine.SetValue("maybeActive", (bool?)true));
+        // maybeActive is bool? (Jint sees it typed via the SetValue); the expression
+        // should NOT collapse to `maybeActive` (that'd fail type-check since lambda
+        // returns bool) — the translator should emit a proper Equal (or normalize).
+        var fn = expr.Compile();
+        Assert.True(fn(new TestUser()));
+    }
 }

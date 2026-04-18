@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Cocoar.JsEval.Linq;
 using Cocoar.JsEval.Linq.Dependencies;
 using Cocoar.JsEval.Linq2Db.Sandbox;
+using Cocoar.JsEval.Linq2Db.Sandbox.Scenarios;
 using Jint;
 using LinqToDB;
 using LinqToDB.Data;
@@ -37,6 +38,8 @@ using (var setup = new DataConnection(dataOptions))
         new User { Name = "Bob",     Email = "b@x.com",  IsActive = true,  Age = 25, City = "Vienna", Zip = "1020" },
         new User { Name = "Charlie", Email = "c@x.com",  IsActive = true,  Age = 50, City = "Linz",   Zip = "4020" },
     ]);
+
+    OptionalChainingScenario.Seed(setup);
 }
 
 await Run("1. JS -> Expression -> LINQ2DB SQLite: byte-identical SQL", db =>
@@ -129,6 +132,8 @@ await Run("3. Dependency tracking: reactive re-run matrix", db =>
             Console.WriteLine($"  change '{prop,-8}' -> re-run? {(deps.DependsOn(prop) ? "YES" : "no ")}");
     }
 });
+
+await Run("4. Optional chaining against LINQ2DB (v3.1.0 regression case)", OptionalChainingScenario.Run);
 
 Console.WriteLine();
 Console.WriteLine("=== DONE ===");
