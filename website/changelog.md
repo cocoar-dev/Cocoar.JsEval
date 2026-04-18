@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file. For the authoritative source, see [`CHANGELOG.md`](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/CHANGELOG.md) in the repo root.
 
+## [3.1.2]
+
+### Added
+- **`TsTranspiler.TranspileWithSourceMap(string)`** — returns JS + Source Map v3 JSON + non-error diagnostics. Lets you map runtime-error positions back to the original TypeScript source for Monaco-style editor integrations.
+
+### Fixed
+- **`TsTranspiler.Transpile(string)` now throws `TsTranspileException` on TypeScript syntax errors.** 3.1.1 and earlier silently returned a near-empty `"use strict";` string — failures surfaced later at `EvaluateExpression` time with generic parser errors. Syntax errors now carry a structured diagnostic list (category, code, message, line, column). Type errors (`const x: number = "oops"`) are still not reported — known limitation of `ts.transpileModule`; requires a future `createProgram`-based add-on.
+
 ## [3.1.1]
 
 ### Fixed

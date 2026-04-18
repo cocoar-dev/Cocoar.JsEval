@@ -308,4 +308,109 @@ export const description: string = describe(cat);
         Assert.Contains("function describe", js);
         Assert.Contains("export", js);
     }
+
+    // --- Error diagnostics (since 3.1.2) ---
+    // Syntax errors in `ts.transpileModule` now surface as TsTranspileException
+    // with structured diagnostics. Type errors are NOT reported — that's a
+    // documented limitation of transpileModule.
+
+    [Fact]
+    public void SyntaxError_ThrowsTsTranspileException_WithDiagnostics()
+    {
+        var transpiler = GetTranspiler();
+
+        var ex = Assert.Throws<TsTranspileException>(() =>
+            transpiler.Transpile("const x: number = 42 @@@ broken"));
+
+        Assert.NotEmpty(ex.Errors);
+        Assert.Contains("TS1005", ex.Message, StringComparison.Ordinal);
+        Assert.All(ex.Errors, d => Assert.Equal(TsDiagnosticCategory.Error, d.Category));
+        Assert.All(ex.Errors, d => Assert.True(d.Line >= 1));
+        Assert.All(ex.Errors, d => Assert.True(d.Column >= 1));
+    }
+
+    [Fact]
+    public void MissingBrace_ThrowsWithAccurateColumn()
+    {
+        var transpiler = GetTranspiler();
+
+        var ex = Assert.Throws<TsTranspileException>(() =>
+            transpiler.Transpile("function f() { return 1"));
+
+        var first = ex.Errors[0];
+        Assert.Equal(1005, first.Code);
+        Assert.Equal(1, first.Line);
+        Assert.True(first.Column > 20);
+    }
+
+    [Fact]
+    public void MultilineError_ReportsCorrectLine()
+    {
+        var transpiler = GetTranspiler();
+
+        var ex = Assert.Throws<TsTranspileException>(() => transpiler.Transpile(
+            "const x = 1;\nconst y: number = 2 @@@\nconst z = 3;"));
+
+        Assert.Contains(ex.Errors, d => d.Line == 2);
+    }
+
+    [Fact]
+    public void ValidTypeScript_DoesNotThrow()
+    {
+        var transpiler = GetTranspiler();
+        var js = transpiler.Transpile("const x: number = 42; console.log(x);");
+        Assert.Contains("42", js, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TypeError_IsNotReported_DocumentedLimitation()
+    {
+        // `ts.transpileModule` doesn't build a full program, so semantic errors
+        // like assigning a string literal to a number-typed binding slip through.
+        // If this test ever starts throwing (e.g. after an upgrade to a
+        // createProgram-based typechecker), update the XML docs on TsTranspiler.
+        var transpiler = GetTranspiler();
+        var js = transpiler.Transpile("const x: number = 'not a number';");
+        Assert.NotEmpty(js);
+    }
+
+    // --- Source map (since 3.1.2) ---
+
+    [Fact]
+    public void TranspileWithSourceMap_ReturnsSourceMapV3Json()
+    {
+        var transpiler = GetTranspiler();
+        var result = transpiler.TranspileWithSourceMap("const x: number = 42;\nconsole.log(x);");
+
+        Assert.NotEmpty(result.Js);
+        Assert.NotEmpty(result.SourceMap);
+        Assert.Contains("\"version\":3", result.SourceMap, StringComparison.Ordinal);
+        Assert.Contains("\"mappings\"", result.SourceMap, StringComparison.Ordinal);
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public void TranspileWithSourceMap_StripsSourceMappingUrlCommentFromJs()
+    {
+        var transpiler = GetTranspiler();
+        var result = transpiler.TranspileWithSourceMap("const x = 1;");
+        Assert.DoesNotContain("sourceMappingURL", result.Js, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TranspileWithSourceMap_SyntaxError_ThrowsWithDiagnostics()
+    {
+        var transpiler = GetTranspiler();
+        var ex = Assert.Throws<TsTranspileException>(() =>
+            transpiler.TranspileWithSourceMap("const x: number = 42 @@@"));
+        Assert.NotEmpty(ex.Errors);
+    }
+
+    [Fact]
+    public void EmptyInput_ReturnsEmptyString_DoesNotThrow()
+    {
+        var transpiler = GetTranspiler();
+        Assert.Equal("", transpiler.Transpile(""));
+        Assert.Equal("", transpiler.Transpile("   \n\t "));
+    }
 }

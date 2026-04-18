@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.2]
+
+### Added
+- **`Cocoar.JsEval.TypeScript` — `TsTranspiler.TranspileWithSourceMap(string)`** returns a `TsTranspileResult(Js, SourceMap, Warnings)` with the JS output, a Source Map v3 JSON string, and any non-error diagnostics. The trailing `//# sourceMappingURL=` comment is stripped from the JS so consumers can embed the map however they prefer (inline base64, sidecar file, in-memory for error-position mapping, …). Enables surfacing runtime-error positions in the original TypeScript source — useful for Monaco-backed editors where admins author scripts and a later `EvaluateExpression` failure needs to point at the right line.
+
+### Fixed
+- **`Cocoar.JsEval.TypeScript` — Transpiler now throws `TsTranspileException` on TypeScript errors instead of silently returning broken output.** 3.1.1 and earlier called `ts.transpileModule` without `reportDiagnostics: true`, so syntax errors produced a near-empty `"use strict";` string with no signal. Now a syntax error surfaces as `TsTranspileException` with a `IReadOnlyList<TsDiagnostic>` (category, TS error code, message, 1-based line/column) — structured enough to drive editor cursor-placement and error banners. Type errors like `const x: number = "oops"` are *still not reported* — `ts.transpileModule` doesn't build a full program; that's a documented limitation and would require a `createProgram`-based typechecker add-on.
+
 ## [3.1.1]
 
 ### Fixed
