@@ -20,7 +20,6 @@ public class TypeScriptRendererDefaults
         [typeof(bool)] = "boolean",
         [typeof(DateTime)] = "Date",
         [typeof(DateTimeOffset)] = "Date",
-        [typeof(Guid)] = "string",
         [typeof(TimeSpan)] = "number",
         [typeof(byte)] = "number",
         [typeof(byte[])] = "ArrayBuffer",

@@ -39,7 +39,6 @@ public class TsDefinitionTests
     [InlineData(typeof(object), "any")]
     [InlineData(typeof(DateTime), "Date")]
     [InlineData(typeof(DateTimeOffset), "Date")]
-    [InlineData(typeof(Guid), "string")]
     [InlineData(typeof(TimeSpan), "number")]
     public void PrimitiveTypes_MapCorrectly(Type netType, string expectedTs)
     {

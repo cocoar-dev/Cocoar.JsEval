@@ -16,6 +16,10 @@
 // built-in lib.es5 ones. At runtime, Cocoar.JsEval.Linq's translator accepts
 // both via its method-map and case-insensitive reflection fallback — so both
 // produce byte-identical Expression trees.
+//
+// Note: the `linq.*` typed-literal helpers (linq.guid, linq.decimal, …) and
+// the branded primitive types (Guid, Decimal, Long) are emitted automatically
+// by `Cocoar.JsEval.TsDefinition` — they're not declared here.
 // =============================================================================
 
 interface String {

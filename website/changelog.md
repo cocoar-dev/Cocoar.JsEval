@@ -4,6 +4,9 @@ All notable changes to this project are documented in this file. For the authori
 
 ## [3.1.2]
 
+### Fixed
+- **`Cocoar.JsEval.TsDefinition` — `Guid` is no longer forced to `string`.** The type-mapping table had `[typeof(Guid)] = "string"`, erasing Guid-ness at the TypeScript layer. Now `Guid` falls through the normal rendering path. Consumers who want the old behaviour can re-add the mapping via `TypeScriptRendererDefaults.TypeMappings`.
+
 ### Added
 - **`TsTranspiler.TranspileWithSourceMap(string)`** — returns JS + Source Map v3 JSON + non-error diagnostics. Lets you map runtime-error positions back to the original TypeScript source for Monaco-style editor integrations.
 

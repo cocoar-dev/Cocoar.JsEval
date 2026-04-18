@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [3.1.2]
 
+### Fixed
+- **`Cocoar.JsEval.TsDefinition` — `Guid` is no longer forced to `string`.** The type-mapping table had `[typeof(Guid)] = "string"`, silently erasing Guid-ness at the TypeScript layer — so in Monaco, `t.CustomerId === 'abc-…'` and `t.CustomerId === linq.guid('abc-…')` looked indistinguishable (both `string === string`), and admins authoring access-policy scripts could bypass `linq.guid(…)` by accident with no editor feedback. The override is gone; `Guid` now falls through the normal rendering path and resolves to `Guid` (or `System.Guid` with namespaces enabled). Consumers who want to preserve the old behaviour can re-add the mapping explicitly via `TypeScriptRendererDefaults.TypeMappings`.
+
 ### Added
 - **`Cocoar.JsEval.TypeScript` — `TsTranspiler.TranspileWithSourceMap(string)`** returns a `TsTranspileResult(Js, SourceMap, Warnings)` with the JS output, a Source Map v3 JSON string, and any non-error diagnostics. The trailing `//# sourceMappingURL=` comment is stripped from the JS so consumers can embed the map however they prefer (inline base64, sidecar file, in-memory for error-position mapping, …). Enables surfacing runtime-error positions in the original TypeScript source — useful for Monaco-backed editors where admins author scripts and a later `EvaluateExpression` failure needs to point at the right line.
 
