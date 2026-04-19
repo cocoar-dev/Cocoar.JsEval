@@ -50,17 +50,11 @@ public class TypeScriptRendererDefaults
         if (TypeMappings.TryGetValue(type, out var directMapping))
             return directMapping;
 
-        // Handle generic type mappings (Task<T> → Promise<T>)
+        // Handle generic type mappings (Task<T> → Promise). The generic args
+        // are appended by the caller from GenericArguments — do not bake them
+        // in here, otherwise the caller would emit them a second time.
         if (type.IsGenericType && GenericTypeMappings.TryGetValue(type.GetGenericTypeDefinition(), out var genericWrapper))
-        {
-            var genericArgs = type.GetGenericArguments();
-            var mappedArgs = genericArgs.Select(t =>
-            {
-                var def = TypeDefinition.FromType(t);
-                return NormalizeTypeName(def, allowedTypes, includeNamespace);
-            });
-            return $"{genericWrapper}<{string.Join(", ", mappedArgs)}>";
-        }
+            return genericWrapper;
 
         if (typeDefinition.IsArray)
             type = type.GetElementType() ?? type;

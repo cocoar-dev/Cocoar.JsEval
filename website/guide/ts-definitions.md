@@ -36,14 +36,18 @@ services.AddTsDefinition();
 ```csharp
 var definitionService = sp.GetRequiredService<TsDefinitionService>();
 
-// Get .d.ts files for all registered modules
+// Get .d.ts files for all registered modules, plus global.d.ts (fetch, require, …)
 var definitions = definitionService.GetTsDefinitions();
-// → { "global.d.ts": "...", "lib.es5.d.ts": "...", ... }
+// → { "global.d.ts": "...", "System.d.ts": "...", "<Module>.d.ts": "...", ... }
 
 // Get module-specific imports (export declarations)
 var imports = definitionService.GetTsImports();
 // → { "common.ts": "export function ...", "http.ts": "export function ..." }
 ```
+
+::: tip Standard-Library types
+This package generates `.d.ts` from **your** C# types — it does not ship the TypeScript standard library (`lib.es5.d.ts`, `lib.dom.d.ts`, …). Monaco's own TypeScript language service loads version-matched libs automatically; if you need a specific newer set, embed the TS 6.0.2 ES-only libs from `Cocoar.JsEval.TypeScript.V8.EmbeddedResources.LibFiles`.
+:::
 
 ### From Custom Types (DefinitionBuilder)
 

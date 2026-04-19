@@ -434,7 +434,12 @@ public class TypeScriptRenderer
             if (!string.IsNullOrWhiteSpace(tdesc.Namespace))
             {
                 var ns = namespaceDefinition.AddNamespaceDefinition(tdesc.Namespace);
-                ns.Types.Add(tdesc);
+                // TypeDefinition.FromType is cached by FriendlyName, so distinct
+                // Type inputs that collapse to the same rendered identifier return
+                // the same TypeDefinition reference. Adding it twice would emit
+                // the declaration twice.
+                if (!ns.Types.Contains(tdesc))
+                    ns.Types.Add(tdesc);
             }
         }
 

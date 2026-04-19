@@ -10,18 +10,10 @@
 
   <ItemGroup>
     <None Remove="TsDefinitions\global.d.ts" />
-    <None Remove="TsDefinitions\lib.es2015.core.d.ts" />
-    <None Remove="TsDefinitions\lib.es5.d.ts" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="TsDefinitions\global.d.ts" LogicalName="global.d.ts">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="TsDefinitions\lib.es2015.core.d.ts" LogicalName="lib.es2015.core.d.ts">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="TsDefinitions\lib.es5.d.ts" LogicalName="lib.es5.d.ts">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </EmbeddedResource>
   </ItemGroup>

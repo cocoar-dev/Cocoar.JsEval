@@ -79,34 +79,40 @@ public class TsDefinitionTests
         Assert.Equal("Promise<void>", result);
     }
 
+    // For generic Task<T>/ValueTask<T>, NormalizeTypeName returns the bare
+    // wrapper ("Promise"); the caller (BuildTypeString / GetTypeString /
+    // BuildTypeDefinitionTypeString) appends generic arguments from the
+    // TypeDefinition. See the full-render assertions further below for the
+    // end-to-end "Promise<string>" output.
+
     [Fact]
-    public void TaskOfString_MapsToPromiseString()
+    public void TaskOfString_MapsToPromiseBare()
     {
         var defaults = new TypeScriptRendererDefaults();
         var typeDef = TypeDefinition.FromType(typeof(Task<string>));
         var result = defaults.NormalizeTypeName(typeDef, []);
 
-        Assert.Equal("Promise<string>", result);
+        Assert.Equal("Promise", result);
     }
 
     [Fact]
-    public void TaskOfInt_MapsToPromiseNumber()
+    public void TaskOfInt_MapsToPromiseBare()
     {
         var defaults = new TypeScriptRendererDefaults();
         var typeDef = TypeDefinition.FromType(typeof(Task<int>));
         var result = defaults.NormalizeTypeName(typeDef, []);
 
-        Assert.Equal("Promise<number>", result);
+        Assert.Equal("Promise", result);
     }
 
     [Fact]
-    public void ValueTaskOfBool_MapsToPromiseBoolean()
+    public void ValueTaskOfBool_MapsToPromiseBare()
     {
         var defaults = new TypeScriptRendererDefaults();
         var typeDef = TypeDefinition.FromType(typeof(ValueTask<bool>));
         var result = defaults.NormalizeTypeName(typeDef, []);
 
-        Assert.Equal("Promise<boolean>", result);
+        Assert.Equal("Promise", result);
     }
 
     // --- Collections stay as .NET types (NOT mapped to Array/Record) ---
@@ -167,8 +173,13 @@ public class TsDefinitionTests
         Assert.Contains("require", global);
     }
 
+    // The package no longer ships its own lib.*.d.ts files. Monaco's TypeScript
+    // language service loads its own (version-matched) libs; Cocoar.JsEval.TypeScript
+    // and Cocoar.JsEval.TypeScript.V8 embed authoritative TS 6.0 libs for their
+    // own transpilation/type-check paths. Shipping a second, stale set from here
+    // only caused version-mismatch surprises.
     [Fact]
-    public void GetTsDefinitions_ContainsLibFiles()
+    public void GetTsDefinitions_DoesNotShipLibFiles()
     {
         var sp = BuildServiceProvider();
         var moduleRegistry = sp.GetRequiredService<IJsModuleRegistry>();
@@ -176,8 +187,8 @@ public class TsDefinitionTests
 
         var definitions = service.GetTsDefinitions();
 
-        Assert.True(definitions.ContainsKey("lib.es5.d.ts"));
-        Assert.True(definitions.ContainsKey("lib.es2015.core.d.ts"));
+        Assert.DoesNotContain("lib.es5.d.ts", definitions.Keys);
+        Assert.DoesNotContain("lib.es2015.core.d.ts", definitions.Keys);
     }
 
     [Fact]
@@ -281,6 +292,39 @@ public class TsDefinitionTests
         }
     }
 
+    // --- Regression tests for TsDefinition renderer bugs ---
+
+    // `Task<T>` / `ValueTask<T>` returned a name with the generic arg already baked in
+    // (e.g. "Promise<string>") while the caller appended the args a second time,
+    // producing "Promise<string><string>" — a parse error in TypeScript.
+    [Fact]
+    public void Render_TaskOfT_DoesNotProduceDoubleGenerics()
+    {
+        var builder = new DefinitionBuilder();
+        builder.AddTypes(typeof(SampleClass));
+
+        var rendered = string.Join("\n", builder.Render().Values);
+
+        Assert.Contains("Promise<string>", rendered);
+        Assert.DoesNotContain("Promise<string><", rendered);
+        Assert.DoesNotContain("><", rendered);
+    }
+
+    // `ref T` return types / parameters leaked the .NET ByRef name suffix '&'
+    // into the rendered output (e.g. "Current: T&"), which is a parse error in
+    // TypeScript (intersection operator without a right operand).
+    [Fact]
+    public void Render_RefReturn_DoesNotLeakAmpersand()
+    {
+        var builder = new DefinitionBuilder();
+        builder.AddTypes(typeof(RefReturningSample));
+
+        var rendered = string.Join("\n", builder.Render().Values);
+
+        Assert.DoesNotContain("&;", rendered);
+        Assert.DoesNotContain("&>", rendered);
+    }
+
     // --- Helper ---
 
     private static ServiceProvider BuildServiceProvider()
@@ -311,5 +355,12 @@ public class TsDefinitionTests
         First = 0,
         Second = 1,
         Third = 2
+    }
+
+    public class RefReturningSample
+    {
+        private int _value;
+        public ref int GetRef() => ref _value;
+        public ref readonly int GetReadOnlyRef() => ref _value;
     }
 }

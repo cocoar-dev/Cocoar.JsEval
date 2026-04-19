@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file. For the authoritative source, see [`CHANGELOG.md`](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/CHANGELOG.md) in the repo root.
 
+## [3.1.3]
+
+### Removed (breaking for direct lib.* consumers)
+- **`Cocoar.JsEval.TsDefinition` no longer ships `lib.es5.d.ts` or `lib.es2015.core.d.ts` via `GetTsDefinitions()`.** Those were vendored copies of a very old TypeScript standard library, pass-through resources for Monaco consumers — but Monaco loads its own version-matched libs internally, and stacking ours on top risked overriding fresher types. `global.d.ts` (hand-written, declares `fetch`, `NewObject`, `exit`, `require`) stays. Consumers who relied on the shipped libs can either use Monaco's built-in libs (default) or embed the current set from `Cocoar.JsEval.TypeScript.V8.EmbeddedResources.LibFiles`.
+
+### Fixed
+- **`Cocoar.JsEval.TsDefinition` — Rendered `.d.ts` output is now parse-clean TypeScript.** Three renderer bugs that produced output the TypeScript compiler refuses. Before the fix, 5 of 9 non-`lib.` files from the default module set failed to parse (`System`, `Cocoar`, `SqlKata`, `Dapper`, `AngleSharp` — 465 parse errors in `System.d.ts` alone); after the fix all 9 parse cleanly. The three issues:
+  - `Task<T>` / `ValueTask<T>` emitted the generic argument twice (`Promise<T><T>`) — `NormalizeTypeName` baked it in and the caller appended it again. Fixed: `NormalizeTypeName` returns the bare wrapper, callers always own generic-arg emission.
+  - `ref T` parameters / returns leaked the .NET ByRef suffix `&` into TS output (`Current: T&`), a parse error (intersection operator without right operand). The old `FullName.EndsWith('&')` check missed `ref T` on generic type parameters, where `FullName` is `null`. Now uses `IsByRef` / `IsPointer` with `GetElementType()`.
+  - Name-colliding types were declared twice in the same namespace (40+ duplicates in `System.d.ts` — `Type`, `Attribute`, …). The renderer re-added the same cached `TypeDefinition` instance on every encounter. Now dedup'd on add.
+
+### Changed
+- **`TypeScriptRendererDefaults.NormalizeTypeName` contract (direct callers only).** For `Task<T>` / `ValueTask<T>` the method now returns `"Promise"` instead of `"Promise<T>"` — callers append generic args from `TypeDefinition.GenericArguments`. Non-generic `Task` / `ValueTask` still return `"Promise<void>"`. Consumers using the bundled `TypeScriptRenderer` see no behaviour change.
+
 ## [3.1.2]
 
 ### Fixed
