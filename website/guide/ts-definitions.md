@@ -77,7 +77,11 @@ services.AddJsEval(js => js
 );
 ```
 
-Any type whose namespace starts with a mapped prefix has that prefix replaced by the target (empty → flattened to root). `System.*` types are excluded by default — they stay fully qualified so Monaco still recognizes `Guid`, `DateTime`, etc.
+**Target-prefix semantics:**
+- **Empty target** (`MapNamespace("X.Y.Z", "")`) — **full flatten**: every type under the source prefix lands at root scope, regardless of how deeply nested the original namespace was. A type in `X.Y.Z.Sub.Inner` emits at root, not under `Sub.Inner`.
+- **Non-empty target** (`MapNamespace("X.Y.Z", "Legacy")`) — **strip + prepend**: sub-namespace structure is preserved. `X.Y.Z.Sub.Inner.Foo` becomes `Legacy.Sub.Inner.Foo`.
+
+`System.*` types are excluded from mapping by default — they stay fully qualified so Monaco still recognizes `Guid`, `DateTime`, etc.
 
 ### Collision detection
 

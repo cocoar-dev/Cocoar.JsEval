@@ -179,12 +179,22 @@ public static class TypeAliasResolver
     {
         foreach (var (source, targetPrefix) in mappings)
         {
+            // Semantics:
+            //   target = ""        → full flatten: everything under `source` lands at root,
+            //                        regardless of how deeply nested the type sat.
+            //   target = "Legacy"  → strip + prepend: `X.Y.Z` under source "X" becomes `Legacy.Y.Z`,
+            //                        preserving sub-namespace structure.
+            // The flatten case is separated out because dropping the prefix while keeping
+            // sub-namespaces (e.g. leaving `Customers.CustomerView` intact under Root) is
+            // almost never what the caller wants — the typical use is "I want all my
+            // projection types at the top, Monaco's 80-char hover path gone". If someone
+            // really wants prefix-stripping with sub-namespaces preserved, they can use
+            // a non-empty target of their choice (e.g. "Flat") or chain multiple
+            // MapNamespace calls for each leaf namespace.
             if (source.Length == 0)
             {
-                // Empty source prefix matches everything — apply verbatim.
-                target = string.IsNullOrEmpty(targetPrefix)
-                    ? ""
-                    : CombineNamespace(targetPrefix, ns);
+                // Empty source prefix matches every namespace.
+                target = string.IsNullOrEmpty(targetPrefix) ? "" : CombineNamespace(targetPrefix, ns);
                 return true;
             }
             if (ns.Equals(source, StringComparison.Ordinal))
@@ -194,8 +204,15 @@ public static class TypeAliasResolver
             }
             if (ns.StartsWith(source + ".", StringComparison.Ordinal))
             {
-                var tail = ns[(source.Length + 1)..];
-                target = string.IsNullOrEmpty(targetPrefix) ? tail : $"{targetPrefix}.{tail}";
+                if (string.IsNullOrEmpty(targetPrefix))
+                {
+                    target = ""; // fully flatten
+                }
+                else
+                {
+                    var tail = ns[(source.Length + 1)..];
+                    target = $"{targetPrefix}.{tail}";
+                }
                 return true;
             }
         }

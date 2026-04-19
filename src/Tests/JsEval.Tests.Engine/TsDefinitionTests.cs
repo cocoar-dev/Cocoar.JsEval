@@ -428,6 +428,44 @@ public class TsDefinitionTests
         Assert.DoesNotContain("namespace JsEval.Tests.Engine", rendered);
     }
 
+    // Regression: MapNamespace("X", "") used to only strip the prefix, leaving
+    // sub-namespaces intact — so a type in X.Sub landed in namespace `Sub`
+    // instead of at root. Empty target is now a *full flatten*: every type
+    // under the source prefix, at any depth, lands at root scope.
+    [Fact]
+    public void MapNamespace_EmptyTarget_FullyFlattensDeepSubNamespaces()
+    {
+        var builder = new DefinitionBuilder();
+        builder.MapNamespace("JsEval.Tests.Engine", "");
+        // Deep type (inside TsDefinitionTests which is nested in JsEval.Tests.Engine.TsDefinitionTests).
+        builder.AddTypes(typeof(FirstHolder));
+
+        var files = builder.Render();
+        var rendered = string.Join("\n", files.Values);
+
+        // Root bucket is 'globals.d.ts'; there should be no 'TsDefinitionTests.d.ts'
+        // or similar "sub-namespace only had its prefix stripped" artifact.
+        Assert.True(files.ContainsKey("globals.d.ts"));
+        Assert.DoesNotContain("TsDefinitionTests.d.ts", files.Keys);
+        Assert.DoesNotContain("declare namespace TsDefinitionTests", rendered);
+    }
+
+    // Non-empty target keeps the "strip + prepend" semantics so consumers who
+    // want to disambiguate between multiple source trees can re-home them under
+    // a shared shorter prefix.
+    [Fact]
+    public void MapNamespace_NonEmptyTarget_StripsAndPrepends()
+    {
+        var builder = new DefinitionBuilder();
+        builder.MapNamespace("JsEval.Tests.Engine", "Short");
+        builder.AddTypes(typeof(FirstHolder));
+
+        var rendered = string.Join("\n", builder.Render().Values);
+
+        // `JsEval.Tests.Engine.TsDefinitionTests.FirstHolder` → `Short.TsDefinitionTests.FirstHolder`
+        Assert.Contains("namespace Short", rendered);
+    }
+
     [Fact]
     public void MapNamespace_DoesNotAffectSystemTypes()
     {
