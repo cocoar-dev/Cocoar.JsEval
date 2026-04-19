@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.3]
+
+### Removed (breaking for direct lib.* consumers)
+- **`Cocoar.JsEval.TsDefinition` no longer ships `lib.es5.d.ts` or `lib.es2015.core.d.ts` as part of `GetTsDefinitions()`.** Those were vendored copies of a very old TypeScript standard library (predated TS 4.x — `Copyright © Microsoft Corporation` header from the original 1.x-era bundle), shipped as a convenience for Monaco integrations. Two problems: (1) they were years out of date, and (2) Monaco's own TypeScript language service already loads its own version-matched libs internally — stacking ours on top could silently override fresher types. Neither this package nor any other `Cocoar.JsEval.*` package reads these files; they were pass-through resources only. `global.d.ts` (the hand-written file that declares JsEval-specific globals like `fetch`, `NewObject`, `exit`, `require`) is unchanged and still ships. Monaco consumers who relied on these should either use Monaco's built-in libs (the default), or embed current libs from `Cocoar.JsEval.TypeScript.V8.EmbeddedResources.LibFiles` (97 files, TS 6.0.2, ES-only).
+
+### Fixed
+- **`Cocoar.JsEval.TsDefinition` — Rendered `.d.ts` output is now parse-clean TypeScript.** Three independent renderer bugs produced output that the TypeScript compiler refuses, silently breaking any consumer that pipes `TsDefinitionService.GetTsDefinitions()` into a real type-check path (Monaco's worker, `ts.createProgram`, IDE language services). Verified with a `ts.createSourceFile` probe: before the fix, 5 of 9 non-`lib.` files produced by the default module set failed to parse (`System`, `Cocoar`, `SqlKata`, `Dapper`, `AngleSharp` — 465 parse errors in `System.d.ts` alone); after the fix, all 9 parse with zero diagnostics.
+  - **`Task<T>` / `ValueTask<T>` emitted the generic argument twice**, producing `Promise<T><T>`. `NormalizeTypeName` baked `<T>` into the returned string *and* `BuildTypeString` appended it a second time from `TypeDefinition.GenericArguments`. Now `NormalizeTypeName` returns the bare wrapper (`Promise`) and the caller appends generic args once — matches the handling of every other generic type.
+  - **`ref T` parameters and return types leaked the .NET ByRef suffix `&` into TS output** (e.g. `Current: T&`) — a TS parse error, since `&` is the intersection operator and needs a right-hand operand. The existing check used `Type.FullName.EndsWith('&')`, but `FullName` is `null` for generic type parameters like `ref T`, so the check silently missed them. Now uses `Type.IsByRef || Type.IsPointer` with `GetElementType()` to unwrap.
+  - **Name-colliding types were declared twice in the same namespace.** `TypeDefinition.FromType` deduplicates by `FriendlyName` via its internal cache, so distinct `Type` inputs collapsing to the same friendly name return the same `TypeDefinition` reference — but the renderer pushed that reference into `namespace.Types` on every encounter, emitting 40+ duplicate declarations across `System.d.ts` (`Type`, `Attribute`, `AdjustmentRule`, `RuntimeTypeHandle`, …). Now dedup'd on add. Remaining same-name collisions from genuinely distinct nested types (e.g. `Span<T>.Enumerator` vs `ReadOnlySpan<T>.Enumerator`) render as duplicate `interface` declarations, which TypeScript accepts via interface merging — a separate, cosmetic issue to address later by including parent-type name in the rendered identifier.
+
+### Changed
+- **`TypeScriptRendererDefaults.NormalizeTypeName(TypeDefinition, …)` contract (direct callers only).** For `Task<T>` / `ValueTask<T>` the method now returns `"Promise"` instead of `"Promise<T>"` — the caller is expected to append the generic args from `TypeDefinition.GenericArguments`. Non-generic `Task` / `ValueTask` still return `"Promise<void>"` (unchanged, comes from `TypeMappings`). Consumers that use the bundled `TypeScriptRenderer` see no behaviour change — the final rendered `.d.ts` output for `Task<string>` is still `Promise<string>`, just composed once instead of twice.
+
 ## [3.1.2]
 
 ### Fixed

@@ -82,12 +82,18 @@ public class TypeDefinition : IDefinition
                 isNullable = false;
         }
 
-        if (type.FullName?.EndsWith('&') == true || type.FullName?.EndsWith('*') == true)
+        // Unwrap ByRef (`ref T`) and pointer (`T*`) types to their element.
+        // Using Type.IsByRef/IsPointer is the only reliable check: for generic
+        // type parameters, Type.FullName is null, so a FullName.EndsWith('&')
+        // check silently misses `ref T` and the '&' leaks into the rendered
+        // TypeScript output (where it's the intersection operator and produces
+        // `T&` without a right operand — a parse error).
+        if (type.IsByRef || type.IsPointer)
         {
-            var cleanedType = Type.GetType(type.FullName.TrimEnd('&', '*'));
-            if (cleanedType is null)
+            var elementType = type.GetElementType();
+            if (elementType is null)
                 return TypeCache.JsAny;
-            type = cleanedType;
+            type = elementType;
         }
 
         var validTypesList = validTypes?.ToList();

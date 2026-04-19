@@ -43,8 +43,6 @@ public class TsDefinitionService
             var assembly = GetType().Assembly;
 
             _definitions["global.d.ts"] = assembly.ReadResourceAsString("global.d.ts")!;
-            _definitions["lib.es2015.core.d.ts"] = assembly.ReadResourceAsString("lib.es2015.core.d.ts")!;
-            _definitions["lib.es5.d.ts"] = assembly.ReadResourceAsString("lib.es5.d.ts")!;
 
             return new Dictionary<string, string>(_definitions);
         }
