@@ -17,6 +17,10 @@ public static class JsEvalBuilderLinqExtensions
     {
         builder.AddExtensionMethods(typeof(JsLinqExtensions));
         builder.RegisterEngineConfigurator(LinqCasts.Register);
+        // Contributes linq.d.ts to TsDefinitionService.GetTsDefinitions() — so
+        // Monaco / tsc see the `linq.*` global automatically without the host
+        // having to hand-wire it.
+        builder.AddTsDefinitionContributor<LinqTsContributor>();
         return builder;
     }
 }

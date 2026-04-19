@@ -10,6 +10,7 @@ public class TsDefinitionService
 {
     private readonly IJsModuleRegistry _moduleRegistry;
     private readonly JsEngineOptions? _engineOptions;
+    private readonly IEnumerable<IJsTsDefinitionContributor> _contributors;
 
     private Dictionary<string, string>? _definitions;
     private Dictionary<string, string>? _imports;
@@ -18,9 +19,18 @@ public class TsDefinitionService
     private readonly object _tsImportsLock = new();
 
     public TsDefinitionService(IJsModuleRegistry moduleRegistry, JsEngineOptions? engineOptions = null)
+        : this(moduleRegistry, engineOptions, contributors: null)
+    {
+    }
+
+    public TsDefinitionService(
+        IJsModuleRegistry moduleRegistry,
+        JsEngineOptions? engineOptions,
+        IEnumerable<IJsTsDefinitionContributor>? contributors)
     {
         _moduleRegistry = moduleRegistry;
         _engineOptions = engineOptions;
+        _contributors = contributors ?? System.Array.Empty<IJsTsDefinitionContributor>();
     }
 
     public Dictionary<string, string> GetTsDefinitions()
@@ -34,7 +44,17 @@ public class TsDefinitionService
             var defBuilder = new DefinitionBuilder();
 
             if (_engineOptions is not null)
+            {
                 defBuilder.AddExtensionMethods(_engineOptions.AllowedExtensionMethods);
+
+                // Mirror user-configured aliases + namespace mappings from the
+                // engine side into the builder so both .d.ts emission AND
+                // NewObject(...) resolution use the same short names.
+                foreach (var kv in _engineOptions.TypeAliases)
+                    defBuilder.AddType(kv.Value, kv.Key);
+                foreach (var mapping in _engineOptions.NamespaceMappings)
+                    defBuilder.MapNamespace(mapping.Source, mapping.Target);
+            }
 
             foreach (var md in definitions)
                 defBuilder.AddTypes(md.ModuleType);
@@ -43,6 +63,13 @@ public class TsDefinitionService
             var assembly = GetType().Assembly;
 
             _definitions["global.d.ts"] = assembly.ReadResourceAsString("global.d.ts")!;
+
+            // Contributor output is applied last — hosts that want to override the
+            // package's bundled files (or any earlier contributor's) can do so by
+            // registering their IJsTsDefinitionContributor behind the default ones.
+            foreach (var contributor in _contributors)
+                foreach (var kv in contributor.GetTsDefinitions())
+                    _definitions[kv.Key] = kv.Value;
 
             return new Dictionary<string, string>(_definitions);
         }

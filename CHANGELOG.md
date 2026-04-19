@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.4]
+
+### Added
+- **`Cocoar.JsEval.Linq` — `linq.d.ts` is now auto-emitted by `TsDefinitionService.GetTsDefinitions()` whenever `AddLinq()` is on the builder.** Previously the `linq` runtime global (`linq.guid('…')`, `linq.decimal('…')`, `linq.today()`, …) had no TypeScript declaration — Monaco flagged every use as `Cannot find name 'linq'` even though it worked at runtime. The hand-written `linq.d.ts` that accompanied `LinqCasts.Register` is now shipped through a new `IJsTsDefinitionContributor` interface: `AddLinq()` registers `LinqTsContributor` as a singleton, and `TsDefinitionService` merges its output into the returned dictionary. Zero configuration on the consumer side — if `AddLinq()` is called, the definition shows up. Any third-party package with its own runtime-only globals can use the same interface. Contributor output is applied last, so hosts can override bundled files if needed.
+- **`JsEvalBuilder.AddTypeAlias<T>("ShortName")` and `MapNamespace(prefix, target)`** — register short-name aliases that are *simultaneously*:
+  - Emitted at **root scope** in the generated `.d.ts` so Monaco's hover popup shows `CustomerView` instead of `TimeToDo.Infrastructure.Persistence.Marten.Projections.Customers.CustomerView`
+  - Resolvable by `NewObject("CustomerView")` at runtime — same name works on both sides
+  Cross-references between aliased/mapped types use the short name too, so `class PrincipalDirectory { Person: PersonData }` renders without the long namespace noise. Single source of truth lives on `JsEngineOptions.TypeAliases` / `JsEngineOptions.NamespaceMappings`; `TsDefinitionService` (when DI-resolved) reads the same data so the two layers cannot drift apart.
+- **`DefinitionBuilder.AddType(Type, string alias)` and `DefinitionBuilder.MapNamespace(source, target)`** — the standalone-builder equivalent for consumers not going through DI. Same collision rules.
+- **`IJsTsDefinitionContributor` and `JsEvalBuilder.AddTsDefinitionContributor<T>()`** — a general extension point for any package that wants to contribute `.d.ts` files without being registered as an `IJsModule`. `Cocoar.JsEval.Linq` is the first internal user.
+
+### Changed
+- **Namespace mappings respect `System.*` by default.** `MapNamespace("", "")` or `MapNamespace("TimeToDo", "")` do not re-home System types — they stay fully qualified as `System.Guid`, `System.DateTime`, etc. The FR had flagged this as the safest default; the alternative (flattening BCL types too) would produce noisy name collisions and pointless short `Guid`/`Int32`/`String` aliases that Monaco already understands via `lib.es*`.
+- **Collision detection fires only when a rule is involved.** Two distinct types that naturally share a short name (e.g. nested `Span<T>.Enumerator` and `ReadOnlySpan<T>.Enumerator`, both rendered as `Enumerator$1` under `System`) keep the v3.1.3 pre-existing behavior of emitting two matching `interface` declarations which TypeScript merges. Once any alias or `MapNamespace` rule touches one of the colliding types, the resolver throws `InvalidOperationException` at render-time (or `NewObject`-map-build-time) with both source types named and three suggested fixes — so the user gets immediate feedback when shaping the output, but unconfigured consumers don't regress. Collisions between two *explicit* aliases on the same name throw at registration time, not render time.
+
 ## [3.1.3]
 
 ### Removed (breaking for direct lib.* consumers)

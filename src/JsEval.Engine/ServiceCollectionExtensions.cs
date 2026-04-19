@@ -35,6 +35,12 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton(builder.Options);
         services.TryAddSingleton<IJsModuleRegistry>(builder.ModuleRegistry);
+
+        // Apply any deferred DI registrations (e.g. IJsTsDefinitionContributor
+        // singletons queued by AddLinq/AddTsDefinitionContributor on the builder).
+        foreach (var register in builder.DeferredRegistrations)
+            register(services);
+
         // Scoped, not Transient: Jint engines are not thread-safe, and multiple
         // services resolving JsEngine in the same request should share one engine
         // so globals set via SetValue are visible across them. Consumers that

@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="TypeScript\cocoar-jseval-linq.d.ts" />
+    <EmbeddedResource Include="TypeScript\linq.d.ts" LogicalName="linq.d.ts" />
   </ItemGroup>
 
 </Project>

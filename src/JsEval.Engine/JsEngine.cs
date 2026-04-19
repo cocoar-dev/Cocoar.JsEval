@@ -80,10 +80,29 @@ var console = {
         Initialize();
     }
 
+    /// <summary>
+    /// Resolve a NewObject(name, ...) call. First consults
+    /// <see cref="JsEngineOptions.TypeAliases"/> for user-registered short names;
+    /// if not found, falls back to the legacy <see cref="TypeHelper.CreateObject"/>
+    /// path (which still handles TypeScript-specific aliases like "date" →
+    /// System.DateTime and assembly-qualified lookups).
+    /// </summary>
+    private object? ResolveAndCreate(string typeName, object[] parameters)
+    {
+        if (!string.IsNullOrEmpty(typeName) && Options.TypeAliases.TryGetValue(typeName, out var aliasedType))
+        {
+            parameters ??= Array.Empty<object>();
+            return parameters.Length > 0
+                ? Activator.CreateInstance(aliasedType, parameters)
+                : Activator.CreateInstance(aliasedType);
+        }
+        return TypeHelper.CreateObject(typeName, parameters);
+    }
+
     private void Initialize()
     {
         _engine.SetValue("exit", new Action(Stop));
-        _engine.SetValue("NewObject", new Func<string, object[], object?>(TypeHelper.CreateObject));
+        _engine.SetValue("NewObject", new Func<string, object[], object?>(ResolveAndCreate));
         _engine.SetValue("require", new Func<string, JsValue>(Require));
 
         RegisterConsole();

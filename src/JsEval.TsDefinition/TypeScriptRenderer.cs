@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using Cocoar.JsEval.Engine;
 using Cocoar.JsEval.TsDefinition.Definitions;
 
 namespace Cocoar.JsEval.TsDefinition;
@@ -11,6 +12,17 @@ public class TypeScriptRenderer
 {
     private readonly TypeScriptRendererDefaults Defaults = new();
     private List<Type> AllowedTypes = [];
+
+    // Short-name map: Type → (mappedNamespace, shortName). Populated once in
+    // Render(DefinitionBuilder) from TypeAliasResolver.Resolve() output. Used by
+    // BuildTypeString / GetTypeString / BuildTypeDefinitionTypeString to rewrite
+    // cross-references, and by the main render loop to place types into the
+    // correct namespace bucket (including the empty "root" bucket).
+    private Dictionary<Type, (string MappedNamespace, string ShortName)> _resolvedNames = new();
+
+    // Types whose MappedNamespace is empty — emitted at module scope with a
+    // 'declare' modifier, no namespace wrapper.
+    private readonly List<TypeDefinition> _rootScopeTypes = new();
 
     private static string? BuildDocComments(int indent, params string[] lines) =>
         BuildDocComments(indent, lines.AsEnumerable());
@@ -286,6 +298,23 @@ public class TypeScriptRenderer
 
     private string BuildTypeString(TypeDefinition typeDefinition, bool includeNamespace = true)
     {
+        // If this type has a user-registered alias / namespace mapping, emit
+        // the resolved short name (optionally qualified with its mapped ns).
+        if (typeDefinition.RawType is not null
+            && _resolvedNames.TryGetValue(typeDefinition.RawType, out var resolved))
+        {
+            var baseName = !includeNamespace || string.IsNullOrEmpty(resolved.MappedNamespace)
+                ? resolved.ShortName
+                : $"{resolved.MappedNamespace}.{resolved.ShortName}";
+            if (typeDefinition.GenericArguments.Count > 0)
+                baseName += $"<{string.Join(", ", typeDefinition.GenericArguments.Select(s => BuildTypeString(s)))}>";
+            if (typeDefinition.IsArray)
+                baseName += "[]";
+            if (typeDefinition.IsNullable)
+                return $"({baseName} | null)";
+            return baseName;
+        }
+
         if (typeDefinition.TryGetPayload<NormalizedNonGenericTypeName>(out var normalized))
             return includeNamespace ? $"{normalized!.Namespace}.{normalized.TypeName}" : normalized!.TypeName;
 
@@ -328,6 +357,24 @@ public class TypeScriptRenderer
 
     private string GetTypeString(TypeDefinition typeDefinition, bool includeNamespace = true)
     {
+        // Honor user aliases / namespace mappings for the human-readable
+        // docstring-style type render too, so `@param` comments stay consistent
+        // with the emitted declaration.
+        if (typeDefinition.RawType is not null
+            && _resolvedNames.TryGetValue(typeDefinition.RawType, out var resolved))
+        {
+            var baseName = !includeNamespace || string.IsNullOrEmpty(resolved.MappedNamespace)
+                ? resolved.ShortName
+                : $"{resolved.MappedNamespace}.{resolved.ShortName}";
+            if (typeDefinition.GenericArguments.Count > 0)
+                baseName += $"<{string.Join(", ", typeDefinition.GenericArguments.Select(s => GetTypeString(s)))}>";
+            if (typeDefinition.IsArray)
+                baseName += "[]";
+            if (typeDefinition.IsNullable)
+                return $"{baseName}?";
+            return baseName;
+        }
+
         var name = Defaults.NormalizeTypeName(typeDefinition, null!, includeNamespace);
 
         if (typeDefinition.IsNullable)
@@ -349,6 +396,18 @@ public class TypeScriptRenderer
 
     private string BuildTypeDefinitionTypeString(TypeDefinition typeDefinition)
     {
+        // Header name for the declaration itself — if the type has a resolved
+        // short name, emit that (unqualified, since we're inside the matching
+        // namespace wrapper or at root scope).
+        if (typeDefinition.RawType is not null
+            && _resolvedNames.TryGetValue(typeDefinition.RawType, out var resolved))
+        {
+            var headerName = resolved.ShortName;
+            if (typeDefinition.GenericArguments.Count > 0)
+                headerName += $"<{string.Join(", ", typeDefinition.GenericArguments.Select(s => BuildTypeString(s)))}>";
+            return headerName;
+        }
+
         if (typeDefinition.TryGetPayload<NormalizedNonGenericTypeName>(out var normalized))
             return normalized!.TypeName;
 
@@ -416,6 +475,25 @@ public class TypeScriptRenderer
     {
         var namespaceDefinition = new NamespaceDefinition();
         AllowedTypes = definitionBuilder.GetTypesToProcess();
+        _rootScopeTypes.Clear();
+
+        // Pre-compute the effective (namespace, short-name) for every type, given
+        // the user's explicit aliases + namespace mappings. Collisions fail loudly
+        // here — better to break the build than silently mis-route a type.
+        //
+        // Only types that were actually touched by a rule (Explicit / NamespaceMapping)
+        // end up in _resolvedNames — Unchanged types keep going through the regular
+        // BuildTypeString / NormalizeTypeName path, so built-in mappings like
+        // `Task<T> → Promise<T>` still apply to them.
+        var resolutions = TypeAliasResolver.Resolve(
+            AllowedTypes,
+            definitionBuilder.GetTypeAliases(),
+            definitionBuilder.GetNamespaceMappings());
+        _resolvedNames = resolutions
+            .Where(r => r.Source != TypeAliasResolutionSource.Unchanged)
+            .ToDictionary(
+                r => r.Type,
+                r => (r.MappedNamespace, r.ShortName));
 
         foreach (var calculatedType in AllowedTypes)
         {
@@ -428,18 +506,39 @@ public class TypeScriptRenderer
                 continue;
 
             var typeString = BuildTypeString(tdesc);
-            if (!typeString.Contains('.') || typeString.EndsWith('&') || typeString.EndsWith('*'))
+            if (typeString.EndsWith('&') || typeString.EndsWith('*'))
+                continue;
+            // Require namespace qualification unless the type was resolved to a
+            // short name (alias or flattened mapping). Without this the root-scope
+            // bucket below would never pick up anything — AllowedTypes includes
+            // primitives/`any` whose BuildTypeString won't contain a dot.
+            var rootScoped = tdesc.RawType is not null
+                && _resolvedNames.TryGetValue(tdesc.RawType, out var res)
+                && string.IsNullOrEmpty(res.MappedNamespace);
+            if (!rootScoped && !typeString.Contains('.'))
                 continue;
 
-            if (!string.IsNullOrWhiteSpace(tdesc.Namespace))
+            if (rootScoped)
             {
-                var ns = namespaceDefinition.AddNamespaceDefinition(tdesc.Namespace);
-                // TypeDefinition.FromType is cached by FriendlyName, so distinct
-                // Type inputs that collapse to the same rendered identifier return
-                // the same TypeDefinition reference. Adding it twice would emit
-                // the declaration twice.
-                if (!ns.Types.Contains(tdesc))
-                    ns.Types.Add(tdesc);
+                if (!_rootScopeTypes.Contains(tdesc))
+                    _rootScopeTypes.Add(tdesc);
+            }
+            else
+            {
+                // Use the resolved (possibly remapped) namespace for placement.
+                var targetNs = tdesc.RawType is not null && _resolvedNames.TryGetValue(tdesc.RawType, out var r)
+                    ? r.MappedNamespace
+                    : tdesc.Namespace;
+                if (!string.IsNullOrWhiteSpace(targetNs))
+                {
+                    var ns = namespaceDefinition.AddNamespaceDefinition(targetNs);
+                    // TypeDefinition.FromType is cached by FriendlyName, so distinct
+                    // Type inputs that collapse to the same rendered identifier return
+                    // the same TypeDefinition reference. Adding it twice would emit
+                    // the declaration twice.
+                    if (!ns.Types.Contains(tdesc))
+                        ns.Types.Add(tdesc);
+                }
             }
         }
 
@@ -480,9 +579,28 @@ public class TypeScriptRenderer
         foreach (var definition in namespaceDefinition.Namespaces.OrderBy(n => n.Name))
             dict.Add($"{definition.Name}.d.ts", Render(definition));
 
+        // Emit root-scope types (aliased or mapped to empty namespace) as a
+        // single file with each declaration at module scope.
+        if (_rootScopeTypes.Count > 0)
+            dict.Add("globals.d.ts", RenderRootScope());
+
         dict.Add("extensions.d.ts", RenderBuiltInExtensions());
 
         return dict;
+    }
+
+    private string RenderRootScope()
+    {
+        var strb = new StringBuilder();
+        foreach (var tdesc in _rootScopeTypes.OrderBy(t =>
+            t.RawType is not null && _resolvedNames.TryGetValue(t.RawType, out var r) ? r.ShortName : t.Name))
+        {
+            // Render at indent 0, prefix each declaration with `declare` to make
+            // it an ambient module-scope declaration usable from any .ts file.
+            var rendered = Render(tdesc, indent: 0);
+            strb.AppendLine($"declare {rendered.TrimStart()}");
+        }
+        return strb.ToString();
     }
 
     private string RenderBuiltInExtensions()

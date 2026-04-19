@@ -363,4 +363,99 @@ public class TsDefinitionTests
         public ref int GetRef() => ref _value;
         public ref readonly int GetReadOnlyRef() => ref _value;
     }
+
+    // --- Test types for alias / MapNamespace / collision tests ---
+
+    public class FirstHolder { public SecondHolder Nested { get; set; } = new(); }
+    public class SecondHolder { public string Value { get; set; } = ""; }
+
+    // --- Tests for v3.1.4 additions: short-name aliases + MapNamespace ---
+
+    [Fact]
+    public void AddType_WithAlias_EmitsAtRootScope()
+    {
+        var builder = new DefinitionBuilder();
+        builder.AddType(typeof(FirstHolder), alias: "FirstHolder");
+
+        var rendered = string.Join("\n", builder.Render().Values);
+
+        // Root-scope emission: no namespace wrapper, just `declare interface FirstHolder`.
+        Assert.Contains("FirstHolder", rendered);
+        Assert.DoesNotContain("namespace JsEval.Tests.Engine.TsDefinitionTests", rendered);
+    }
+
+    [Fact]
+    public void AddType_WithAlias_CrossReferenceUsesShortName()
+    {
+        var builder = new DefinitionBuilder();
+        builder.AddType(typeof(FirstHolder), alias: "FirstHolder");
+        builder.AddType(typeof(SecondHolder), alias: "SecondHolder");
+
+        var rendered = string.Join("\n", builder.Render().Values);
+
+        // FirstHolder's `Nested: SecondHolder` cross-ref should use the short name,
+        // not the fully-qualified JsEval.Tests.Engine.TsDefinitionTests.SecondHolder.
+        Assert.Contains("Nested: SecondHolder", rendered);
+        Assert.DoesNotContain("TsDefinitionTests.SecondHolder", rendered);
+    }
+
+    [Fact]
+    public void AddType_DuplicateAliasForDifferentTypes_Throws()
+    {
+        var builder = new DefinitionBuilder();
+        builder.AddType(typeof(FirstHolder), alias: "Holder");
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            builder.AddType(typeof(SecondHolder), alias: "Holder"));
+
+        Assert.Contains("Holder", ex.Message);
+        Assert.Contains("FirstHolder", ex.Message);
+        Assert.Contains("SecondHolder", ex.Message);
+    }
+
+    [Fact]
+    public void MapNamespace_FlattensToRootScope()
+    {
+        var builder = new DefinitionBuilder();
+        builder.MapNamespace("JsEval.Tests.Engine", "");
+        builder.AddTypes(typeof(FirstHolder));
+
+        var rendered = string.Join("\n", builder.Render().Values);
+
+        // The type's original deep namespace (TsDefinitionTests is nested) collapses
+        // to root; we should see `FirstHolder` without the long namespace wrapper.
+        Assert.Contains("FirstHolder", rendered);
+        Assert.DoesNotContain("namespace JsEval.Tests.Engine", rendered);
+    }
+
+    [Fact]
+    public void MapNamespace_DoesNotAffectSystemTypes()
+    {
+        var builder = new DefinitionBuilder();
+        builder.MapNamespace("", ""); // Try to flatten everything — should NOT affect System.*
+        builder.AddTypes(typeof(FirstHolder));
+
+        var rendered = string.Join("\n", builder.Render().Values);
+
+        // System.* stays fully qualified even with a greedy MapNamespace rule.
+        Assert.Contains("System", rendered);
+    }
+
+    // NewObject must resolve through the JsEngineOptions.TypeAliases map so the
+    // same short name used in .d.ts works at runtime.
+    [Fact]
+    public void AddTypeAlias_NewObjectResolvesShortName()
+    {
+        var sc = new ServiceCollection();
+        sc.AddJsEval(b => b.AddTypeAlias<FirstHolder>("FirstHolder"));
+        using var sp = sc.BuildServiceProvider();
+
+        using var scope = sp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
+
+        // NewObject("FirstHolder") must hit the alias map and return a real FirstHolder instance.
+        var result = engine.EvaluateExpression("NewObject('FirstHolder')");
+        var instance = result.ToObject();
+        Assert.IsType<FirstHolder>(instance);
+    }
 }

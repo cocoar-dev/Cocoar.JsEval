@@ -49,6 +49,66 @@ var imports = definitionService.GetTsImports();
 This package generates `.d.ts` from **your** C# types — it does not ship the TypeScript standard library (`lib.es5.d.ts`, `lib.dom.d.ts`, …). Monaco's own TypeScript language service loads version-matched libs automatically; if you need a specific newer set, embed the TS 6.0.2 ES-only libs from `Cocoar.JsEval.TypeScript.V8.EmbeddedResources.LibFiles`.
 :::
 
+## Short names — aliases + namespace mapping
+
+`.d.ts` from reflection tends to emit types *fully qualified* — `TimeToDo.Infrastructure.Persistence.Marten.Projections.Customers.CustomerView` — and Monaco's hover popup shows that 80-character string. Since v3.1.4 you can register **short names** that are simultaneously:
+
+- Emitted at **root scope** in the `.d.ts` (`declare class CustomerView { … }` without namespace wrapper)
+- Resolvable by `NewObject("CustomerView")` at runtime — the same name works on both sides
+- Used in cross-references between other rendered types (`Person: PersonData` instead of `Person: TimeToDo.…Principals.PersonData`)
+
+### Per-type alias
+
+```csharp
+services.AddJsEval(js => js
+    .AddTypeAlias<PrincipalDirectory>()             // uses typeof(T).Name → "PrincipalDirectory"
+    .AddTypeAlias<CustomerView>("CustomerView")     // explicit name
+);
+```
+
+### Bulk namespace mapping
+
+One rule for a whole projection tree:
+
+```csharp
+services.AddJsEval(js => js
+    .MapNamespace("TimeToDo.Infrastructure.Persistence.Marten.Projections", "")
+    .MapNamespace("TimeToDo.Domain.Identity", "")
+);
+```
+
+Any type whose namespace starts with a mapped prefix has that prefix replaced by the target (empty → flattened to root). `System.*` types are excluded by default — they stay fully qualified so Monaco still recognizes `Guid`, `DateTime`, etc.
+
+### Collision detection
+
+Two distinct types resolving to the same final name throw at render time with actionable next steps:
+
+```
+Type alias/mapping collision — two or more distinct types resolve to the same short name:
+  'CustomerView' at root scope:
+    - TimeToDo.Projections.Customers.CustomerView
+    - TimeToDo.Reports.CustomerView
+
+Resolve by one of:
+  - Adding an explicit AddTypeAlias(typeof(X), "UniqueName") on one of them
+  - Narrowing MapNamespace(...) to only one source prefix
+  - Using a non-empty target prefix in MapNamespace to disambiguate
+  - Excluding one of the types from the builder
+```
+
+Natural same-name collisions that *no rule touched* (e.g. `Span<T>.Enumerator` and `ReadOnlySpan<T>.Enumerator` — both nested `Enumerator$1` under `System`) still emit as-is; TypeScript merges matching `interface` declarations automatically.
+
+### Standalone (non-DI) use
+
+```csharp
+var builder = new DefinitionBuilder()
+    .MapNamespace("TimeToDo.Projections", "")
+    .AddType(typeof(CustomerView), alias: "CustomerView");
+var defs = builder.Render();
+```
+
+The standalone path covers `.d.ts` generation only. For the `NewObject`-runtime integration, use `JsEvalBuilder.AddTypeAlias` / `MapNamespace` — those flow through `JsEngineOptions` to both layers.
+
 ### From Custom Types (DefinitionBuilder)
 
 For types that aren't exposed as modules (like `AccessContext` or `QueryBuilder`), use `DefinitionBuilder` directly:
