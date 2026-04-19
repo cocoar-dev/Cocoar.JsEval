@@ -86,6 +86,13 @@ public sealed class JsEvalBuilder
         return this;
     }
 
+    /// <inheritdoc cref="JsEngineOptions.AddRuntimeOnlyExtensionMethods(Type[])"/>
+    public JsEvalBuilder AddRuntimeOnlyExtensionMethods(params Type[] types)
+    {
+        Options.AddRuntimeOnlyExtensionMethods(types);
+        return this;
+    }
+
     public JsEvalBuilder AllowAssemblies(params Assembly[] assemblies)
     {
         Options.AllowAssemblies(assemblies);

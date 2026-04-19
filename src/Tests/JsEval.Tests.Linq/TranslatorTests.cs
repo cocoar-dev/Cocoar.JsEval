@@ -141,10 +141,21 @@ public class TranslatorTests
         Assert.Contains("Where", actual.ToString(), StringComparison.Ordinal);
     }
 
+    // The LINQ-side augmentations of String / Array<T> are now reflection-generated
+    // by LinqTsContributor (not a hand-written embedded file). The full
+    // TsDefinitionService round-trip is covered in LinqTsContributorTests; this is
+    // a smoke check so a stray refactor that loses these signatures trips here too.
     [Fact]
-    public void LinqTypeScriptDefinition_CanRead_EmbeddedDts()
+    public void LinqTsContributor_EmitsStringAndArrayAugmentations()
     {
-        var content = LinqTypeScriptDefinition.Read();
+        var contributor = Activator.CreateInstance(
+            typeof(Cocoar.JsEval.Linq.LinqCasts).Assembly.GetType("Cocoar.JsEval.Linq.LinqTsContributor", throwOnError: true)!)
+            as Cocoar.JsEval.IJsTsDefinitionContributor;
+        Assert.NotNull(contributor);
+
+        var defs = contributor!.GetTsDefinitions().ToDictionary(kv => kv.Key, kv => kv.Value);
+        var content = defs["cocoar-jseval-linq.d.ts"];
+
         Assert.Contains("interface String", content);
         Assert.Contains("Contains(value: string): boolean", content);
         Assert.Contains("interface Array<T>", content);

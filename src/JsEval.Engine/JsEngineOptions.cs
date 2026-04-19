@@ -42,6 +42,20 @@ public sealed class JsEngineOptions
         return this;
     }
 
+    /// <summary>
+    /// Register extension-method container types with Jint's runtime resolver
+    /// ONLY — they are <b>not</b> surfaced in <c>TsDefinitionService</c>'s
+    /// emitted <c>.d.ts</c> files. Use for BCL-wide types like
+    /// <see cref="System.Linq.Enumerable"/> where we want JS-side method
+    /// resolution (<c>[1,2,3].Where(...)</c>) but don't want 500+ Enumerable
+    /// signatures polluting the generated <c>System.d.ts</c>.
+    /// </summary>
+    public JsEngineOptions AddRuntimeOnlyExtensionMethods(params Type[] types)
+    {
+        JintOptions.AddExtensionMethods(types);
+        return this;
+    }
+
     public JsEngineOptions AllowAssemblies(params Assembly[] assemblies)
     {
         JintOptions.AllowClr(assemblies);

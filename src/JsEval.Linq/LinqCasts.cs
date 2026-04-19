@@ -47,40 +47,13 @@ public static class LinqCasts
     /// </remarks>
     public static void Register(Jint.Engine engine)
     {
-        engine.SetValue("__linq_decimal",    (Func<string, decimal>)ParseDecimal);
-        engine.SetValue("__linq_double",     (Func<string, double>)ParseDouble);
-        engine.SetValue("__linq_int",        (Func<string, int>)ParseInt);
-        engine.SetValue("__linq_long",       (Func<string, long>)ParseLong);
-        engine.SetValue("__linq_date",       (Func<string, DateTime>)ParseDate);
-        engine.SetValue("__linq_dateUtc",    (Func<string, DateTime>)ParseDateUtc);
-        engine.SetValue("__linq_dateOffset", (Func<string, DateTimeOffset>)ParseDateOffset);
-        engine.SetValue("__linq_dateOnly",   (Func<string, DateOnly>)ParseDateOnly);
-        engine.SetValue("__linq_timeOnly",   (Func<string, TimeOnly>)ParseTimeOnly);
-        engine.SetValue("__linq_timeSpan",   (Func<string, TimeSpan>)ParseTimeSpan);
-        engine.SetValue("__linq_guid",       (Func<string, Guid>)ParseGuid);
-        engine.SetValue("__linq_today",      (Func<DateTime>)(() => DateTime.Today));
-        engine.SetValue("__linq_now",        (Func<DateTime>)(() => DateTime.Now));
-        engine.SetValue("__linq_utcNow",     (Func<DateTime>)(() => DateTime.UtcNow));
-        engine.SetValue("__linq_todayUtc",   (Func<DateTime>)(() => DateTime.UtcNow.Date));
-        engine.Execute(@"
-            var linq = {
-                decimal:    __linq_decimal,
-                double:     __linq_double,
-                int:        __linq_int,
-                long:       __linq_long,
-                date:       __linq_date,
-                dateUtc:    __linq_dateUtc,
-                dateOffset: __linq_dateOffset,
-                dateOnly:   __linq_dateOnly,
-                timeOnly:   __linq_timeOnly,
-                timeSpan:   __linq_timeSpan,
-                guid:       __linq_guid,
-                today:      __linq_today,
-                now:        __linq_now,
-                utcNow:     __linq_utcNow,
-                todayUtc:   __linq_todayUtc
-            };
-        ");
+        // Bind a single POCO as the `linq` global. Jint exposes its public
+        // instance methods as JS properties via reflection, so scripts call
+        // `linq.guid('…')`, `linq.decimal('…')` etc. the same way they did
+        // with the previous inline `var linq = { ... }` shim — but now the
+        // single source of truth is the LinqGlobal class, which LinqTsContributor
+        // reflects over to emit linq.d.ts (no hand-written .d.ts to drift from).
+        engine.SetValue("linq", new LinqGlobal());
     }
 
     // --- numeric ---
