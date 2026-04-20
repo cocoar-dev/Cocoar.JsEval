@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file. For the authoritative source, see [`CHANGELOG.md`](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/CHANGELOG.md) in the repo root.
 
+## [3.1.4]
+
+### Added
+- **`linq.d.ts` is auto-emitted when `AddLinq()` is on the builder.** Before this, Monaco flagged every `linq.guid('…')` / `linq.decimal('…')` with `Cannot find name 'linq'`. Now `TsDefinitionService.GetTsDefinitions()` surfaces the declaration automatically — via a new `IJsTsDefinitionContributor` extension point (any third-party package can plug in its own `.d.ts`).
+- **`AddTypeAlias<T>("ShortName")` and `MapNamespace(prefix, target)` on the builder.** Aliases are emitted at **root scope** in the `.d.ts` so Monaco hovers show `CustomerView` instead of `TimeToDo.Infrastructure.Persistence.Marten.Projections.Customers.CustomerView` — *and* `NewObject("CustomerView")` resolves to the same type at runtime. One config, both layers. Cross-references between aliased/mapped types use the short name throughout so nested projections don't drag 60-char prefixes into every member.
+- **`DefinitionBuilder.AddType(Type, string alias)` / `MapNamespace(source, target)`** for the standalone-builder path (non-DI consumers).
+
+### Changed
+- **`System.*` types are excluded from `MapNamespace` by default** — they stay fully qualified. `MapNamespace("", "")` does not re-home `System.Guid`; use explicit `AddTypeAlias` if you really want BCL renaming (unusual).
+- **Collision detection fires only when a rule is involved.** Two distinct types that naturally share a short name (`Span<T>.Enumerator` / `ReadOnlySpan<T>.Enumerator`) keep the v3.1.3 behavior of emitting two matching `interface` declarations (TypeScript merges them). Once *any* alias or `MapNamespace` touches one side, the resolver throws at render-time with both source types named and actionable next steps — no silent overrides.
+
 ## [3.1.3]
 
 ### Removed (breaking for direct lib.* consumers)

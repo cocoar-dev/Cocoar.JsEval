@@ -81,9 +81,27 @@ jobs:
       - name: Build prerelease version
         id: prerelease
         run: |
-          BASE="${{ steps.gv.outputs.MajorMinorPatch }}-${{ steps.gv.outputs.PreReleaseLabel }}"
+          # Only develop-sourced prereleases inherit GitVersion's predicted
+          # MAJOR.MINOR.PATCH — that's the branch we release stable from, so
+          # the prediction is meaningful. Feature branches get a fixed 0.0.0
+          # base so the version string doesn't silently promise a release
+          # target (`3.2.0-short-names.2` suggests "this is going to be 3.2.0",
+          # which may not be true if the branch dies or gets re-scoped).
+          LABEL="${{ steps.gv.outputs.PreReleaseLabel }}"
           N="${{ steps.gv.outputs.CommitsSinceVersionSource }}"
-          VERSION="$BASE.$N"
+
+          if [ -z "$LABEL" ]; then
+            echo "::error ::GitVersion produced empty PreReleaseLabel for $GITHUB_REF. Check GitVersion.yml branch rules — refusing to build a malformed version."
+            exit 1
+          fi
+
+          if [ "$GITHUB_REF" = "refs/heads/develop" ]; then
+            BASE="${{ steps.gv.outputs.MajorMinorPatch }}"
+          else
+            BASE="0.0.0"
+          fi
+
+          VERSION="${BASE}-${LABEL}.${N}"
 
           echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
           echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_OUTPUT

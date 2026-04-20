@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\JsEval.Linq\Cocoar.JsEval.Linq.csproj" />
+    <ProjectReference Include="..\..\JsEval.TsDefinition\Cocoar.JsEval.TsDefinition.csproj" />
   </ItemGroup>
 
 </Project>

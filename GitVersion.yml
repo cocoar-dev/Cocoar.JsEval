@@ -1,8 +1,8 @@
 mode: ContinuousDeployment
 
 branches:
-  main:
-    regex: ^main$
+  develop:
+    regex: ^develop$
     label: beta
     is-main-branch: true
 

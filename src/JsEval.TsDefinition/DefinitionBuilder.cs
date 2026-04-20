@@ -12,6 +12,17 @@ public class DefinitionBuilder
     private List<Type> CalculatedTypes { get; set; } = [];
     private List<MethodInfo> ExtensionMethods { get; set; } = [];
 
+    // Short-name alias map (alias → Type), matching JsEngineOptions.TypeAliases.
+    // When populated, the matched type is emitted at the root scope (no namespace
+    // wrapper) under the alias, and cross-references elsewhere resolve to the
+    // same short name.
+    private Dictionary<string, Type> TypeAliases { get; } = new(StringComparer.Ordinal);
+
+    // Ordered list of (sourcePrefix, targetPrefix) namespace mappings. Applied in
+    // insertion order on first-match basis (so more specific prefixes should be
+    // registered before broader ones).
+    private List<(string Source, string Target)> NamespaceMappings { get; } = [];
+
     public DefinitionBuilder AddTypes(params Type[] types) => AddTypes(types.AsEnumerable());
 
     public DefinitionBuilder AddTypes(IEnumerable<Type> types)
@@ -26,6 +37,63 @@ public class DefinitionBuilder
     }
 
     public DefinitionBuilder AddType<T>() => AddTypes(typeof(T));
+
+    /// <summary>
+    /// Register a type with an explicit short name. The type is emitted at the
+    /// root scope (outside any <c>declare namespace</c> wrapper) under the alias,
+    /// and every cross-reference to this type from other rendered members uses
+    /// the short name too.
+    /// <para>
+    /// Aliases win over <see cref="MapNamespace(string, string)"/> when both match.
+    /// </para>
+    /// </summary>
+    public DefinitionBuilder AddType(Type type, string alias)
+    {
+        if (string.IsNullOrWhiteSpace(alias))
+            throw new ArgumentException("Alias must be a non-empty identifier.", nameof(alias));
+        AddTypes(type);
+        var t = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
+        if (TypeAliases.TryGetValue(alias, out var existing) && existing != t)
+        {
+            throw new InvalidOperationException(
+                $"Type alias '{alias}' is already assigned to '{existing.FullName}'. " +
+                $"Cannot reassign it to '{t.FullName}'. " +
+                $"Pick a different alias to disambiguate.");
+        }
+        TypeAliases[alias] = t;
+        return this;
+    }
+
+    public DefinitionBuilder AddType<T>(string alias) => AddType(typeof(T), alias);
+
+    /// <summary>
+    /// Map a source namespace prefix to a target namespace prefix for rendering.
+    /// Any type whose namespace starts with <paramref name="sourcePrefix"/> has
+    /// that prefix replaced by <paramref name="targetPrefix"/> in the emitted
+    /// <c>.d.ts</c>. An empty <paramref name="targetPrefix"/> flattens matched
+    /// types to the root scope.
+    /// <para>
+    /// <c>System.*</c> types are excluded from mapping by default — they stay
+    /// fully qualified. Cross-references to mapped types from other rendered
+    /// members resolve to the mapped short form.
+    /// </para>
+    /// <para>
+    /// Per-type <see cref="AddType(Type, string)"/> aliases win over namespace
+    /// mappings when both match. If two distinct types resolve to the same
+    /// (mapped-namespace, name) pair, <see cref="Render"/> throws.
+    /// </para>
+    /// </summary>
+    public DefinitionBuilder MapNamespace(string sourcePrefix, string targetPrefix)
+    {
+        ArgumentNullException.ThrowIfNull(sourcePrefix);
+        ArgumentNullException.ThrowIfNull(targetPrefix);
+        NamespaceMappings.Add((sourcePrefix, targetPrefix));
+        return this;
+    }
+
+    internal IReadOnlyDictionary<string, Type> GetTypeAliases() => TypeAliases;
+
+    internal IReadOnlyList<(string Source, string Target)> GetNamespaceMappings() => NamespaceMappings;
 
     public DefinitionBuilder AddExtensionMethods(params Type[] types) => AddExtensionMethods(types.AsEnumerable());
 
