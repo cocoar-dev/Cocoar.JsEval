@@ -72,8 +72,15 @@ var console = {
 
     private readonly ConcurrentDictionary<int, CancellationTokenSource> _timers = new();
     private int _nextTimerId;
-    private int _executionCount;
     private bool _modulesAdded;
+
+    // Main-script module cache: dedup identical scripts so Top-Level code runs
+    // only once per unique content (ES-module semantics, not REPL-style re-execution).
+    // Exports stabilise — callers that want "fresh per call" work should use
+    // `export function foo()` and invoke it via InvokeFunction.
+    private readonly Dictionary<string, string> _sourceModuleNames = new(StringComparer.Ordinal);
+    private readonly Dictionary<JsPreparedModule, string> _preparedModuleNames = new();
+    private int _nextMainModuleId;
 
     private ObjectInstance? _mainModule;
 
@@ -309,6 +316,15 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
         new(Jint.Engine.PrepareScript(script));
 
     /// <summary>
+    /// Pre-parses an ES module script for repeated execution via <see cref="ExecuteAsync(JsPreparedModule)"/>.
+    /// Supports <c>import</c> / <c>export</c>. Parse cost is paid once; each execution runs
+    /// top-level statements fresh (so <c>export const guid = common.Guid.New()</c> yields a new GUID per call).
+    /// The returned object is thread-safe and can be cached globally.
+    /// </summary>
+    public static JsPreparedModule PrepareModule(string script) =>
+        new(Jint.Engine.PrepareModule(script));
+
+    /// <summary>
     /// Evaluates a plain JavaScript script synchronously. No module system, no import/export, no async/await.
     /// Variables set via <see cref="SetValue"/> are available as globals.
     /// Use this when you know the script content and it doesn't need modules or async.
@@ -380,8 +396,12 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
                 _modulesAdded = true;
             }
 
-            var moduleName = $"__main_{_executionCount++}__";
-            _engine.Modules.Add(moduleName, script);
+            if (!_sourceModuleNames.TryGetValue(script, out var moduleName))
+            {
+                moduleName = $"__main_{_nextMainModuleId++}__";
+                _engine.Modules.Add(moduleName, script);
+                _sourceModuleNames[script] = moduleName;
+            }
 
             // Use async path only when needed — avoid exception-driven fallback
             if (script.Contains("await", StringComparison.Ordinal))
@@ -395,6 +415,49 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
             {
                 _mainModule = _engine.Modules.Import(moduleName);
             }
+        }
+        catch (ExecutionCanceledException)
+        {
+            // Script was cancelled via Stop()
+        }
+        catch (Exception exception)
+        {
+            throw exception.GetBaseException();
+        }
+    }
+
+    /// <summary>
+    /// Executes a pre-parsed ES module script. Avoids the per-call parse cost of
+    /// <see cref="ExecuteAsync(string)"/>. Follows standard ES-module semantics:
+    /// top-level code runs once per unique module; repeated executions of the same
+    /// <see cref="JsPreparedModule"/> instance on the same engine return the cached
+    /// module namespace. For per-call work, export a function and invoke it via
+    /// <see cref="InvokeFunction"/>.
+    /// </summary>
+    public async Task ExecuteAsync(JsPreparedModule prepared)
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+
+        try
+        {
+            if (!_modulesAdded)
+            {
+                AddModules();
+                _modulesAdded = true;
+            }
+
+            if (!_preparedModuleNames.TryGetValue(prepared, out var moduleName))
+            {
+                moduleName = $"__main_{_nextMainModuleId++}__";
+                var preparedModule = prepared.Prepared;
+                _engine.Modules.Add(moduleName, builder => builder.AddModule(ref preparedModule));
+                _preparedModuleNames[prepared] = moduleName;
+            }
+
+            var result = await _engine.EvaluateAsync(
+                $"import('{moduleName}')",
+                cancellationToken: _cancellationTokenSource.Token);
+            _mainModule = result.AsObject();
         }
         catch (ExecutionCanceledException)
         {

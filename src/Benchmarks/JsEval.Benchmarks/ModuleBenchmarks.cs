@@ -14,7 +14,9 @@ public class ModuleBenchmarks
     private ServiceProvider _noModulesSp = null!;
     private ServiceProvider _commonModuleSp = null!;
     private ServiceProvider _threeModulesSp = null!;
-    private JsEngine? _engine;
+    private JsPreparedModule _preparedImportScript = null!;
+    private JsPreparedModule _preparedPooledImportScript = null!;
+    private JsEngine _pooledImportEngine = null!;
 
     private const string SimpleScript = "export const x = 2 + 3;";
 
@@ -40,53 +42,78 @@ export const guid = common.Guid.New().toString();
             .AddModule<HttpModule>()
         );
         _threeModulesSp = scThree.BuildServiceProvider();
+
+        _preparedImportScript = JsEngine.PrepareModule(ImportScript);
+        _preparedPooledImportScript = JsEngine.PrepareModule(ImportScript);
+        _pooledImportEngine = _commonModuleSp.GetRequiredService<JsEngine>();
     }
 
     [GlobalCleanup]
     public void GlobalCleanup()
     {
+        _pooledImportEngine.Dispose();
         _noModulesSp.Dispose();
         _commonModuleSp.Dispose();
         _threeModulesSp.Dispose();
     }
 
-    [IterationCleanup]
-    public void IterationCleanup()
-    {
-        _engine?.Dispose();
-        _engine = null;
-    }
-
     [Benchmark(Baseline = true, Description = "Execute script without any modules registered")]
     public async Task<int?> NoModules()
     {
-        _engine = _noModulesSp.GetRequiredService<JsEngine>();
-        await _engine.ExecuteAsync(SimpleScript);
-        return _engine.GetValue<int>("x");
+        using var scope = _noModulesSp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
+        await engine.ExecuteAsync(SimpleScript);
+        return engine.GetValue<int>("x");
     }
 
     [Benchmark(Description = "Execute with Common module registered (not imported)")]
     public async Task<int?> WithCommonModule()
     {
-        _engine = _commonModuleSp.GetRequiredService<JsEngine>();
-        await _engine.ExecuteAsync(SimpleScript);
-        return _engine.GetValue<int>("x");
+        using var scope = _commonModuleSp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
+        await engine.ExecuteAsync(SimpleScript);
+        return engine.GetValue<int>("x");
     }
 
     [Benchmark(Description = "Execute with 3 modules registered (not imported)")]
     public async Task<int?> WithThreeModules()
     {
-        _engine = _threeModulesSp.GetRequiredService<JsEngine>();
-        await _engine.ExecuteAsync(SimpleScript);
-        return _engine.GetValue<int>("x");
+        using var scope = _threeModulesSp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
+        await engine.ExecuteAsync(SimpleScript);
+        return engine.GetValue<int>("x");
     }
 
     [Benchmark(Description = "Actually import and use Common module")]
     public async Task<string?> ImportModule()
     {
-        _engine = _commonModuleSp.GetRequiredService<JsEngine>();
-        await _engine.ExecuteAsync(ImportScript);
-        return _engine.GetValue<string>("guid");
+        using var scope = _commonModuleSp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
+        await engine.ExecuteAsync(ImportScript);
+        return engine.GetValue<string>("guid");
+    }
+
+    [Benchmark(Description = "Import module via PrepareModule (fresh engine)")]
+    public async Task<string?> ImportModulePrepared()
+    {
+        using var scope = _commonModuleSp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
+        await engine.ExecuteAsync(_preparedImportScript);
+        return engine.GetValue<string>("guid");
+    }
+
+    [Benchmark(Description = "Import module via ExecuteAsync(string) — pooled engine (hot loop)")]
+    public async Task<string?> ImportModulePooled()
+    {
+        await _pooledImportEngine.ExecuteAsync(ImportScript);
+        return _pooledImportEngine.GetValue<string>("guid");
+    }
+
+    [Benchmark(Description = "Import module via PrepareModule — pooled engine (hot loop)")]
+    public async Task<string?> ImportModulePreparedPooled()
+    {
+        await _pooledImportEngine.ExecuteAsync(_preparedPooledImportScript);
+        return _pooledImportEngine.GetValue<string>("guid");
     }
 
     [Benchmark(Description = "Cost of registering modules via builder")]

@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file. For the authoritative source, see [`CHANGELOG.md`](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/CHANGELOG.md) in the repo root.
 
+## [Unreleased]
+
+### Added
+- **`JsEngine.PrepareModule(string)`** — pre-parse an ES-module script (`import` / `export`) for repeated execution. Returns a thread-safe `JsPreparedModule` that can be cached globally and passed to `ExecuteAsync(JsPreparedModule)`.
+- **`JsEngine.ExecuteAsync(JsPreparedModule)`** — overload that accepts a pre-parsed module.
+
+### Changed (behavioural)
+- **`ExecuteAsync` now follows standard ES-module semantics.** Top-level code runs once per unique script content on a given engine. Repeated `ExecuteAsync` calls on the same script return the cached module namespace instead of re-parsing and re-evaluating top-level statements. Matches how ES modules work in Node / browsers / Deno. **Migration:** scripts that relied on top-level code re-running (`export const id = Math.random()` yielding a different `id` per call) need per-call work exposed as exported functions (`export function newId() { return Math.random(); }`) invoked via `InvokeFunction`. For true per-call re-execution, use the lightweight path (`Evaluate(string)` / `EvaluateAsync(string)`) which has no module system.
+- **Module cache eliminates the `__main_N__` memory leak** — long-lived engines no longer accumulate a new entry in Jint's module registry per `ExecuteAsync` call.
+
+### Performance
+- **Hot-loop `import` ~115× faster** on a pooled engine — `ExecuteAsync(string)` with a repeated script drops from 14 µs/call to 123 ns/call.
+- **Pooled `ExecuteAsync(prepared)` ~9× faster** — 12 µs → 1.3 µs per call.
+- See [`PERFORMANCE-COMPARISON.md`](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/PERFORMANCE-COMPARISON.md) for the full before/after table.
+
+### Fixed (benchmark infrastructure)
+- **Async/Task-interop benchmarks (`ValueBenchmarks.TaskInterop`, `EngineBenchmarks.AsyncAwait`) now run.** Both previously returned `NA` due to a scoped-DI disposal bug in the benchmark harness: the engine was disposed between iterations, hitting `ObjectDisposedException` on any async path. Benchmarks now open a fresh DI scope per iteration. Side effect: "Engine creation (cold start)" now measures real construction cost (~9.8 µs) instead of a DI cache lookup (~1.5 µs).
+
 ## [3.1.4]
 
 ### Added

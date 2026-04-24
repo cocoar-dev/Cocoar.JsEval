@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`JsEngine.PrepareModule(string)`** — pre-parse an ES-module script for repeated execution. Returns a thread-safe `JsPreparedModule` that can be cached globally and passed to `ExecuteAsync(JsPreparedModule)`. Avoids the per-call parse cost on fresh engines; on a pooled engine the same prepared module hits the module cache directly.
+- **`JsEngine.ExecuteAsync(JsPreparedModule)`** — overload that accepts a pre-parsed module.
+
+### Changed (behavioural)
+- **`ExecuteAsync(string)` and `ExecuteAsync(JsPreparedModule)` now follow standard ES-module semantics.** Top-level code runs **once per unique script content** on a given engine. Repeated executions of the same script return the cached module namespace instead of re-parsing and re-evaluating top-level statements. This matches how ES modules work everywhere else (Node, browsers, Deno) and is the opposite of the previous "REPL-style every-call re-execution" behaviour.
+  - **Migration:** scripts that relied on top-level code re-running (e.g. `export const id = Math.random()` yielding a different `id` on each call) need to be rewritten to expose per-call work as **exported functions**: `export function newId() { return Math.random(); }` invoked via `engine.InvokeFunction("newId")`. This is the idiomatic JS/TS pattern and works the same in Node and the browser.
+  - The lightweight path (`Evaluate(string)` / `Evaluate(prepared)` / `EvaluateAsync(string)`) has no module system and always runs the full script — use it if you truly need per-call re-execution semantics.
+- **Module cache eliminates the `__main_N__` memory leak.** The previous implementation generated a unique module name per call (`__main_0__`, `__main_1__`, …) which accumulated indefinitely in Jint's module registry on long-lived engines. The new content-addressed cache stores O(unique scripts) entries instead of O(calls).
+
+### Performance
+- **Hot-loop `import` is now ~115× faster** on a pooled engine — `ExecuteAsync(string)` with a repeated script drops from 14 µs/call to 123 ns/call (cache hit returns the module namespace directly, no parse / link / evaluate).
+- **Pooled + `ExecuteAsync(prepared)`** drops from 12 µs/call to 1.3 µs/call (~9×).
+- Fresh-engine numbers are unchanged (nothing to cache on first use). See `PERFORMANCE-COMPARISON.md` at the repo root for the full before/after table.
+
+### Fixed (benchmark infrastructure)
+- **`ValueBenchmarks.TaskInterop` and `EngineBenchmarks.AsyncAwait` now run successfully.** Both previously returned `NA` — the benchmark harness reused a scoped `JsEngine` across iterations but called `Dispose()` after each one, which disposed the engine's `CancellationTokenSource`; the next iteration hit `ObjectDisposedException` on any async path. Benchmarks now open a fresh DI scope per iteration, so measurements reflect a real fresh-engine cost (and async paths complete).
+- **"Engine creation (cold start)" benchmark now measures what it claims.** The pre-fix number (~1.5 µs) was a DI cache lookup of a reused scoped instance, not actual engine construction. The real cold-start cost is ~9.8 µs.
+
 ## [3.1.4]
 
 ### Added
