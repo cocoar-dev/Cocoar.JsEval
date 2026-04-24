@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.1.5]
+## [3.2.0]
 
 ### Added
 - **`JsEngine.PrepareModule(string)`** — pre-parse an ES-module script for repeated execution. Returns a thread-safe `JsPreparedModule` that can be cached globally and passed to `ExecuteAsync(JsPreparedModule)`. Avoids the per-call parse cost on fresh engines; on a pooled engine the same prepared module hits the module cache directly.

@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file. For the authoritative source, see [`CHANGELOG.md`](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/CHANGELOG.md) in the repo root.
 
-## [3.1.5]
+## [3.2.0]
 
 ### Added
 - **`JsEngine.PrepareModule(string)`** — pre-parse an ES-module script (`import` / `export`) for repeated execution. Returns a thread-safe `JsPreparedModule` that can be cached globally and passed to `ExecuteAsync(JsPreparedModule)`.
