@@ -112,7 +112,8 @@ public class LightweightEvalBenchmarks
     [Benchmark(Description = "New engine + Evaluate(string) — simple")]
     public void NewEngine_String_Simple()
     {
-        using var engine = _sp.GetRequiredService<JsEngine>();
+        using var scope = _sp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
         engine.SetValue("ctx", _ctx);
         engine.SetValue("query", _query);
         engine.Evaluate(SimpleScript);
@@ -122,7 +123,8 @@ public class LightweightEvalBenchmarks
     [Benchmark(Description = "New engine + Evaluate(string) — complex")]
     public void NewEngine_String_Complex()
     {
-        using var engine = _sp.GetRequiredService<JsEngine>();
+        using var scope = _sp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
         engine.SetValue("ctx", _ctx);
         engine.SetValue("query", _query);
         engine.Evaluate(ComplexScript);
@@ -136,7 +138,8 @@ public class LightweightEvalBenchmarks
     [Benchmark(Description = "New engine + Evaluate(prepared) — simple")]
     public void NewEngine_Prepared_Simple()
     {
-        using var engine = _sp.GetRequiredService<JsEngine>();
+        using var scope = _sp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
         engine.SetValue("ctx", _ctx);
         engine.SetValue("query", _query);
         engine.Evaluate(_simpleScriptPrepared);
@@ -146,7 +149,8 @@ public class LightweightEvalBenchmarks
     [Benchmark(Description = "New engine + Evaluate(prepared) — complex")]
     public void NewEngine_Prepared_Complex()
     {
-        using var engine = _sp.GetRequiredService<JsEngine>();
+        using var scope = _sp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
         engine.SetValue("ctx", _ctx);
         engine.SetValue("query", _query);
         engine.Evaluate(_complexScriptPrepared);
@@ -191,7 +195,8 @@ public class LightweightEvalBenchmarks
     [Benchmark(Description = "ExecuteAsync (module path) — simple")]
     public async Task ExecuteAsync_Simple()
     {
-        using var engine = _sp.GetRequiredService<JsEngine>();
+        using var scope = _sp.CreateScope();
+        var engine = scope.ServiceProvider.GetRequiredService<JsEngine>();
         engine.SetValue("ctx", _ctx);
         engine.SetValue("query", _query);
         await engine.ExecuteAsync("query.WhereResponsible(ctx.UserId);");

@@ -11,6 +11,7 @@ namespace JsEval.Benchmarks;
 public class ValueBenchmarks
 {
     private ServiceProvider _serviceProvider = null!;
+    private IServiceScope? _scope;
     private JsEngine? _engine;
 
     [GlobalSetup]
@@ -27,16 +28,20 @@ public class ValueBenchmarks
         _serviceProvider.Dispose();
     }
 
+    // Fresh scope per iteration — JsEngine is scoped, so a new scope gives a new engine.
+
     [IterationSetup]
     public void IterationSetup()
     {
-        _engine = _serviceProvider.GetRequiredService<JsEngine>();
+        _scope = _serviceProvider.CreateScope();
+        _engine = _scope.ServiceProvider.GetRequiredService<JsEngine>();
     }
 
     [IterationCleanup]
     public void IterationCleanup()
     {
-        _engine?.Dispose();
+        _scope?.Dispose();
+        _scope = null;
         _engine = null;
     }
 
