@@ -43,7 +43,16 @@ public sealed class JsEngine : IScriptEngine, IDisposable, IAsyncDisposable
     private readonly List<string> _useTaggedModules = [];
     private readonly Dictionary<Type, object> _instantiatedModules = [];
 
-    private static readonly ConcurrentDictionary<Type, string> EsModules = new();
+    // Per-module-type cache of the PRE-PARSED wrapper AST. The wrapper is the
+    // JavaScript bridge that re-exports the CLR module's methods/properties as
+    // ES-module exports. Building the source is cheap; PARSING it for every
+    // fresh engine is the expensive part — Prepared<Module> sidesteps that by
+    // parsing exactly once globally and handing the AST to each engine via
+    // ModuleBuilder.AddModule.
+    // Cached reflection info per module type — GetMethods/GetProperties are
+    // not free and the result is invariant for the type's lifetime.
+    private sealed record ModuleShape(PropertyInfo[] Properties, MethodInfo[] Methods);
+    private static readonly ConcurrentDictionary<Type, ModuleShape> ModuleShapes = new();
 
     // Pre-parsed JS scripts — parsed once, reused across all engine instances
     private static readonly Prepared<Script> ConsoleScript = Jint.Engine.PrepareScript(@"
@@ -251,6 +260,12 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
             case string str: _engine.SetValue(name, str); break;
             case double dbl: _engine.SetValue(name, dbl); break;
             case bool b: _engine.SetValue(name, b); break;
+            // JS numbers are IEEE-754 double; route integer/float CLR primitives
+            // straight to the double setter instead of the reflective FromObject path.
+            case int i: _engine.SetValue(name, (double)i); break;
+            case long l: _engine.SetValue(name, (double)l); break;
+            case float f: _engine.SetValue(name, (double)f); break;
+            case decimal m: _engine.SetValue(name, (double)m); break;
             default: _engine.SetValue(name, JsValue.FromObject(_engine, value)); break;
         }
     }
@@ -437,30 +452,77 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
 
         foreach (var moduleDefinition in moduleDefinitions)
         {
-            var src = EsModules.GetOrAdd(moduleDefinition.ModuleType, _ =>
-            {
-                var methods = moduleDefinition.ModuleType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly);
-                var properties = moduleDefinition.ModuleType.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly);
-                var sourceParts = new StringBuilder();
-                sourceParts.AppendLine($"var __{moduleDefinition.Name} = require('{moduleDefinition.Name}');");
-
-                var processedMethods = new HashSet<string>();
-                foreach (var methodInfo in methods)
-                {
-                    if (processedMethods.Add(methodInfo.Name))
-                        sourceParts.AppendLine($"export function {methodInfo.Name}() {{ return __{moduleDefinition.Name}.{methodInfo.Name}(...arguments); }}");
-                }
-
-                foreach (var propertyInfo in properties)
-                    sourceParts.AppendLine($"export var {propertyInfo.Name} = __{moduleDefinition.Name}.{propertyInfo.Name}");
-
-                return sourceParts.ToString();
-            });
-
-            _engine.Modules.Add(moduleDefinition.Name, src);
+            // Register each module directly via ModuleBuilder — no JS wrapper
+            // source is generated or parsed. The module's public members become
+            // named exports straight away, so `import * as x from 'foo'` and
+            // `import { member } from 'foo'` resolve against pre-bound JsValues
+            // instead of an ES-module wrapper that chains through require().
+            var definition = moduleDefinition;
+            _engine.Modules.Add(definition.Name, builder => BuildModule(builder, definition));
         }
     }
 
+    private void BuildModule(Jint.Runtime.Modules.ModuleBuilder builder, IJsModuleDefinition definition)
+    {
+        var instance = _moduleRegistry.BuildModuleInstance(
+            definition.Name, _serviceProvider, this, _providedTypeFactories, _useTaggedModules);
+        _instantiatedModules[instance.GetType()] = instance;
+
+        var shape = ModuleShapes.GetOrAdd(definition.ModuleType, static type => new ModuleShape(
+            type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly),
+            type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)));
+
+        foreach (var property in shape.Properties)
+        {
+            var value = property.GetValue(instance);
+            if (value is not null)
+                builder.ExportObject(property.Name, value);
+        }
+
+        var processedMethods = new HashSet<string>();
+        foreach (var method in shape.Methods)
+        {
+            if (method.IsSpecialName) continue; // skip property get_/set_ accessors
+            if (!processedMethods.Add(method.Name)) continue; // first overload wins (matches legacy behavior)
+            builder.ExportFunction(method.Name, InvokerFor(instance, method));
+        }
+    }
+
+    private Func<JsValue[], JsValue> InvokerFor(object instance, MethodInfo method)
+    {
+        var parameters = method.GetParameters();
+        var engine = _engine;
+        return args =>
+        {
+            var converted = new object?[parameters.Length];
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                if (i < args.Length)
+                {
+                    var raw = args[i].ToObject();
+                    if (raw is not null && !parameters[i].ParameterType.IsInstanceOfType(raw))
+                    {
+                        try { raw = Convert.ChangeType(raw, parameters[i].ParameterType, System.Globalization.CultureInfo.InvariantCulture); }
+                        catch { /* let MethodInfo.Invoke's default binder make the final attempt */ }
+                    }
+                    converted[i] = raw;
+                }
+                else
+                {
+                    converted[i] = parameters[i].HasDefaultValue
+                        ? parameters[i].DefaultValue
+                        : parameters[i].ParameterType.IsValueType
+                            ? Activator.CreateInstance(parameters[i].ParameterType)
+                            : null;
+                }
+            }
+            var result = method.Invoke(instance, converted);
+            return result is null ? JsValue.Undefined : JsValue.FromObject(engine, result);
+        };
+    }
+
+    // Public JS global `require(name)` — kept for backward compatibility. The
+    // internal module-loading path no longer uses it (see BuildModule above).
     private JsValue Require(string value)
     {
         var inst = _moduleRegistry.BuildModuleInstance(value, _serviceProvider, this, _providedTypeFactories, _useTaggedModules);
