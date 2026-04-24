@@ -8,8 +8,8 @@ JavaScript/TypeScript execution library for .NET, built on [Jint](https://github
 ## Features
 
 - JavaScript execution via Jint (ES2025 support)
-- Four execution methods: `ExecuteAsync()` (standard), `Evaluate()`, `Evaluate(prepared)`, `EvaluateAsync()`
-- Pre-parsed scripts (`Prepare()`) for maximum throughput
+- Execution methods: `ExecuteAsync(string)` / `ExecuteAsync(prepared module)` (standard), `Evaluate(string)` / `Evaluate(prepared)`, `EvaluateAsync()`
+- Pre-parsed scripts (`Prepare()` / `PrepareModule()`) for maximum throughput
 - TypeScript 6.0 transpilation with embedded compiler
 - `fetch()` API with opt-in sandboxing
 - Automatic .NET `Task` → JS `Promise` interop
@@ -50,10 +50,13 @@ services.AddJsEval(b => b
 ```csharp
 var engine = sp.GetRequiredService<JsEngine>();
 await engine.ExecuteAsync(@"
-    import * as common from 'common'
-    export const id = common.Guid.New();
+    import * as common from 'common';
+    export function newId() { return common.Guid.New().toString(); }
 ");
+var id = engine.InvokeFunction("newId"); // fresh GUID each call
 ```
+
+> **ES-module semantics:** top-level code runs once per unique script on a given engine — repeated `ExecuteAsync` calls return the cached module namespace. Put per-call work inside exported functions and invoke them via `InvokeFunction`. For true per-call re-execution use the lightweight `Evaluate(string)` path.
 
 ### Pre-Parsed Scripts (for repeated execution)
 
@@ -112,8 +115,9 @@ const data = await loadData('item-123'); // .NET Task becomes a Promise
 | Method | Module System | async | Prepared | Use Case |
 |---|:---:|:---:|:---:|---|
 | `ExecuteAsync(string)` | Yes | Yes | No | **Standard** -- use when you don't know what's in the script |
+| `ExecuteAsync(JsPreparedModule)` | Yes | Yes | Yes | Pre-parsed module -- reuse across calls |
 | `Evaluate(string)` | No | No | No | Lightweight sync -- when you control the script |
-| `Evaluate(JsPreparedScript)` | No | No | Yes | Max performance -- pre-parsed, reusable |
+| `Evaluate(JsPreparedScript)` | No | No | Yes | Max performance -- pre-parsed, reusable, no module system |
 | `EvaluateAsync(string)` | No | Yes | No | Lightweight async -- no modules but needs await |
 
 `ExecuteAsync` is the **default/standard** method -- it provides the full module system and is always safe. `Evaluate` is a **conscious opt-in** for a restricted execution mode -- choose it when you know your scripts don't need modules.
