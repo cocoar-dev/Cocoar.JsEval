@@ -18,6 +18,11 @@ public class Cat : Animal
 
 public class Bird : Animal { public string Species { get; set; } = ""; }
 
+// For combined discriminator mapping tests (property-based LINQ filter + CLR-type narrowing)
+public class Principal { public string Name { get; set; } = ""; public string ParticipantType { get; set; } = ""; }
+public class PersonView : Principal { public string Email { get; set; } = ""; }
+public class CompanyView : Principal { public string CompanyName { get; set; } = ""; }
+
 public enum UserStatus { None, Active, Archived, Deleted }
 
 public class TestUser

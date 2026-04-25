@@ -671,7 +671,7 @@ var expr = JsExpressionTranslator.Translate<Participant, bool>(jsFn, engine, opt
 
 ### AND conditions
 
-All properties live on the flat base type, so no type casting is needed on the right side of `&&`:
+**Property-only discriminator** (no `ConcreteType`) — base-type properties only, no cast:
 
 ```typescript
 (p) => Type.Is(p, 'person') && p.Firstname.startsWith('A')
@@ -680,6 +680,15 @@ All properties live on the flat base type, so no type casting is needed on the r
 
 (p) => Type.IsOneOf(p, ['person', 'company']) && p.Name.startsWith('A')
 // → (p.ParticipantType == "person" || p.ParticipantType == "company") && p.Name.StartsWith("A")
+```
+
+**Combined discriminator** (`ConcreteType` set alongside `PropertyName`) — base-type properties need no cast; subtype-only properties are resolved and cast automatically. The ORM still receives the property-equality filter (`p.Prop == "value"`); the narrowing is a translator-side side-channel:
+
+```typescript
+// Email is on PersonView only — translator recognizes the property-equality
+// check, injects PersonView as the narrowing target, and emits the cast.
+(p) => Type.Is(p, 'person') && p.Email.endsWith('@example.com')
+// → p.ParticipantType == "person" && ((PersonView)p).Email.EndsWith("@example.com")
 ```
 
 ### IntelliSense in Monaco

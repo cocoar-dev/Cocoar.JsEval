@@ -695,11 +695,12 @@ public static class JsExpressionTranslator
         {
             var left = Visit((AstExpr)le.Left, ctx);
 
-            // Collect all TypeIs nodes from the left operand (spanning both AndAlso
-            // and OrElse sub-trees) and push them as narrowing frames so that the
-            // right operand can resolve subtype-only members via TryResolveViaIntersection.
+            // Collect narrowing frames from the left operand so the right operand can
+            // resolve subtype-only members via TryResolveViaIntersection.
+            // Two sources: TypeIs nodes (CLR-type mappings) and Equal(p.Prop, "val") nodes
+            // from combined discriminator mappings that have both PropertyName and ConcreteType.
             var narrowings = new Dictionary<ParameterExpression, List<Type>>();
-            CollectNarrowings(left, narrowings);
+            CollectNarrowings(left, narrowings, ctx.Options.DiscriminatorMappings);
             foreach (var (param, types) in narrowings)
                 ctx.PushNarrowing(param, types);
 
@@ -722,11 +723,19 @@ public static class JsExpressionTranslator
     }
 
     /// <summary>
-    /// Recursively collects all <c>TypeIs(param, T)</c> nodes reachable via
-    /// <c>AndAlso</c> or <c>OrElse</c> sub-trees. Used to build the narrowing
-    /// frame pushed into the AND right operand.
+    /// Recursively collects narrowing frames reachable via <c>AndAlso</c>/<c>OrElse</c>
+    /// sub-trees. Two node types contribute a frame:
+    /// <list type="bullet">
+    ///   <item><c>TypeIs(param, T)</c> — CLR-type mappings.</item>
+    ///   <item><c>param.Prop == "value"</c> — combined discriminator mappings where
+    ///   both <c>PropertyName</c> (for ORM-safe LINQ) and <c>ConcreteType</c> (for
+    ///   narrowing) are set. The <c>ConcreteType</c> is injected as the narrowing target.</item>
+    /// </list>
     /// </summary>
-    private static void CollectNarrowings(LinqExpr expr, Dictionary<ParameterExpression, List<Type>> result)
+    private static void CollectNarrowings(
+        LinqExpr expr,
+        Dictionary<ParameterExpression, List<Type>> result,
+        IReadOnlyList<DiscriminatorMapping> mappings)
     {
         switch (expr)
         {
@@ -735,10 +744,26 @@ public static class JsExpressionTranslator
                 if (!result.TryGetValue(p, out var list)) result[p] = list = [];
                 if (!list.Contains(tb.TypeOperand)) list.Add(tb.TypeOperand);
                 break;
+            case System.Linq.Expressions.BinaryExpression { NodeType: ExpressionType.Equal } eq
+                when eq.Left is System.Linq.Expressions.MemberExpression { Expression: ParameterExpression ep } me
+                && eq.Right is ConstantExpression { Value: string val }:
+            {
+                var m = mappings.FirstOrDefault(x =>
+                    x.PropertyName == me.Member.Name &&
+                    x.Value == val &&
+                    x.ConcreteType != null &&
+                    x.BaseType.IsAssignableFrom(ep.Type));
+                if (m != null)
+                {
+                    if (!result.TryGetValue(ep, out var mlist)) result[ep] = mlist = [];
+                    if (!mlist.Contains(m.ConcreteType!)) mlist.Add(m.ConcreteType!);
+                }
+                break;
+            }
             case System.Linq.Expressions.BinaryExpression
                 { NodeType: ExpressionType.AndAlso or ExpressionType.OrElse } bin:
-                CollectNarrowings(bin.Left, result);
-                CollectNarrowings(bin.Right, result);
+                CollectNarrowings(bin.Left, result, mappings);
+                CollectNarrowings(bin.Right, result, mappings);
                 break;
         }
     }

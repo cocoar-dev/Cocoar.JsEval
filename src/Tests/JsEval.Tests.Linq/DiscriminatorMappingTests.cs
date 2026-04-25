@@ -239,4 +239,58 @@ public class DiscriminatorMappingTests
         Assert.Contains("ds: readonly D[]): value is AnimalByDiscriminator<D>", globalsFile);
         Assert.Contains("IsOneOf(value: object, ds: string[]): boolean;", globalsFile);
     }
+
+    // ── Combined mapping (property-based LINQ + CLR-type narrowing) ──────────
+
+    private static readonly TranslationOptions CombinedOpts = new()
+    {
+        DiscriminatorMappings =
+        [
+            new(typeof(Principal), "person",  typeof(PersonView),  "ParticipantType"),
+            new(typeof(Principal), "company", typeof(CompanyView), "ParticipantType"),
+        ]
+    };
+
+    [Fact]
+    public void CombinedMapping_Is_ProducesPropertyEqual()
+    {
+        Expression<Func<Principal, bool>> expected = p => p.ParticipantType == "person";
+        var actual = Translate<Principal, bool>("(p) => Type.Is(p, 'person')", CombinedOpts);
+        Assert.Equal(expected.ToString(), actual.ToString());
+    }
+
+    [Fact]
+    public void CombinedMapping_AndNarrowing_AccessesSubtypeProperty()
+    {
+        // Combined mapping emits p.ParticipantType == "person" for ORM compatibility,
+        // but ConcreteType = PersonView enables AND-narrowing so Email resolves correctly.
+        Expression<Func<Principal, bool>> expected =
+            p => p.ParticipantType == "person" && ((PersonView)p).Email.EndsWith("@example.com");
+        var actual = Translate<Principal, bool>(
+            "(p) => Type.Is(p, 'person') && p.Email.endsWith('@example.com')", CombinedOpts);
+        Assert.Equal(expected.ToString(), actual.ToString());
+    }
+
+    [Fact]
+    public void CombinedMapping_AndNarrowing_BaseProperty_NeedsNoNarrowing()
+    {
+        Expression<Func<Principal, bool>> expected =
+            p => p.ParticipantType == "person" && p.Name.StartsWith("Alice");
+        var actual = Translate<Principal, bool>(
+            "(p) => Type.Is(p, 'person') && p.Name.startsWith('Alice')", CombinedOpts);
+        Assert.Equal(expected.ToString(), actual.ToString());
+    }
+
+    [Fact]
+    public void PropertyOnlyMapping_AndNarrowing_Throws()
+    {
+        // Property-only mapping has no ConcreteType → narrowing cannot be injected → throws.
+        var opts = new TranslationOptions
+        {
+            DiscriminatorMappings = [new(typeof(Principal), "person", "ParticipantType")]
+        };
+        Assert.Throws<InvalidOperationException>(() =>
+            Translate<Principal, bool>("(p) => Type.Is(p, 'person') && p.Email.endsWith('@example.com')", opts));
+    }
+
 }

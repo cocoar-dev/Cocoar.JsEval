@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased — 3.2.0-beta]
+## [Unreleased — 3.3.0-beta]
 
 ### Added
 
@@ -31,6 +31,10 @@ All notable changes to this project will be documented in this file.
 ### Removed
 
 - **`DiscriminatorEntry`** — builder helper struct removed. The new `AddDiscriminatorMappings` overloads use native C# tuple and `string` syntax directly.
+
+### Fixed
+
+- **AND-narrowing for combined discriminator mappings.** `Type.Is(p, 'person') && p.Email.endsWith(...)` now resolves subtype-only properties correctly when using combined mappings (`AddDiscriminatorMappings<T>("PropName", ("person", typeof(PersonView)), …)`). Previously `CollectNarrowings` recognized only `TypeBinaryExpression` nodes — combined mappings emit `p.Prop == "value"` (`BinaryExpression{Equal}`), so no narrowing frame was ever pushed and the property lookup threw. `CollectNarrowings` now also recognizes the property-equality pattern and injects `ConcreteType` as the narrowing target. Property-only mappings (no `ConcreteType`) still throw — there is no subtype to narrow to.
 
 ## [3.2.0]
 
