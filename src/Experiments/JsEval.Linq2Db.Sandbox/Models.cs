@@ -2,6 +2,31 @@ using LinqToDB.Mapping;
 
 namespace Cocoar.JsEval.Linq2Db.Sandbox;
 
+// Polymorphic hierarchy for discriminator-mapping scenario.
+// LinqToDB maps this as a single "Participants" table with a Discriminator column.
+[InheritanceMapping(Code = "person",  Type = typeof(PersonParticipant))]
+[InheritanceMapping(Code = "company", Type = typeof(CompanyParticipant))]
+[Table("Participants")]
+public abstract class Participant
+{
+    [PrimaryKey, Identity] public int Id { get; set; }
+    [Column] public string Name { get; set; } = "";
+    [Column(IsDiscriminator = true)] public string Discriminator { get; set; } = "";
+}
+
+[Table("Participants")]
+public class PersonParticipant : Participant
+{
+    [Column] public string? Firstname { get; set; }
+    [Column] public string? Lastname { get; set; }
+}
+
+[Table("Participants")]
+public class CompanyParticipant : Participant
+{
+    [Column] public string? VatNumber { get; set; }
+}
+
 [Table("Users")]
 public class User
 {

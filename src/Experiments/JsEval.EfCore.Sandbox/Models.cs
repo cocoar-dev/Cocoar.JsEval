@@ -45,6 +45,25 @@ public class Customer
     public string Name { get; set; } = "";
 }
 
+// Polymorphic hierarchy for discriminator-mapping sandbox scenario.
+// EF Core maps this as TPH with a 'Discriminator' column.
+public abstract class Participant
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
+public class PersonParticipant : Participant
+{
+    public string? Firstname { get; set; }
+    public string? Lastname { get; set; }
+}
+
+public class CompanyParticipant : Participant
+{
+    public string? VatNumber { get; set; }
+}
+
 public class AppDb : DbContext
 {
     public AppDb(DbContextOptions<AppDb> options) : base(options) { }
@@ -53,6 +72,7 @@ public class AppDb : DbContext
     public DbSet<Person> Persons => Set<Person>();
     public DbSet<Todo> Todos => Set<Todo>();
     public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<Participant> Participants => Set<Participant>();
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
@@ -63,5 +83,9 @@ public class AppDb : DbContext
             .HasOne(t => t.Customer).WithMany()
             .HasForeignKey(t => t.CustomerId);
         mb.Entity<Customer>().Property(c => c.Id).ValueGeneratedNever();
+        mb.Entity<Participant>()
+            .HasDiscriminator<string>("Discriminator")
+            .HasValue<PersonParticipant>("person")
+            .HasValue<CompanyParticipant>("company");
     }
 }

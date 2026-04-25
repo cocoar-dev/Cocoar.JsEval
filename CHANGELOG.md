@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased — 3.2.0-beta]
+
+### Added
+
+- **`Type.IsOneOf(value, ['a','b',…])`** — shorthand for multiple OR'd `Type.Is` calls. At runtime evaluates each discriminator in order and returns `true` on the first match. In LINQ predicates the translator expands it to an `OrElse` chain. TypeScript definition emits a conditional-type overload so Monaco narrows the union type correctly (`value is PersonView | CompanyView`).
+
+- **`AddDiscriminatorMappings<T>(propertyName, ...)`** on `JsEvalBuilder` — property-based discriminator mappings with the property name specified once at the group level. Two forms:
+  - `("ParticipantType", ("person", typeof(PersonView)), ("company", typeof(CompanyView)))` — LINQ generates `p.ParticipantType == "person"`; Monaco narrows to the view type.
+  - `("ParticipantType", "person", "company")` — LINQ generates property equality; `Type.Is` returns plain `boolean`.
+
+- **`DiscriminatorMapping` constructors** for property-based discrimination:
+  - `new(baseType, value, propertyName)` — property equality, no Monaco narrowing.
+  - `new(baseType, value, concreteType, propertyName)` — property equality + Monaco narrowing via view type.
+
+- **`JsEngine` auto-registers `Type` global** when `DiscriminatorMappings` are configured — no manual `engine.SetValue("Type", …)` needed.
+
+- **`DefinitionBuilder.AddDiscriminatorMappings`** — registers discriminator overloads so `TypeScriptRenderer` emits `declare const Type` with per-value `Is()` overloads and a conditional-type `IsOneOf<D>()` overload. `TsDefinitionService` mirrors `JsEngineOptions.DiscriminatorMappings` automatically in the DI path.
+
+- **Namespace-mapping fallback in `Type.Is`** — when no explicit mapping matches, `Type.Is` tries the namespace-mapped short name next. Lookup order: explicit mapping → type alias → namespace-mapped name.
+
+### Changed
+
+- **`DiscriminatorMapping` is now a `class` (was a `record`)**. Adds `PropertyName` (nullable `string`) and `ConcreteType` (nullable `Type`); `IsMatch` is a pre-compiled `Func<object, string, bool>` — no per-call reflection.
+
+- **`TsDefinitionService`** skips property-only mappings (null `ConcreteType`) when emitting Monaco narrowing overloads.
+
+### Removed
+
+- **`DiscriminatorEntry`** — builder helper struct removed. The new `AddDiscriminatorMappings` overloads use native C# tuple and `string` syntax directly.
+
 ## [3.2.0]
 
 ### Added

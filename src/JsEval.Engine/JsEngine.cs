@@ -130,6 +130,9 @@ var console = {
         if (Options.FetchEnabled)
             Fetch.FetchHandler.Register(_engine);
 
+        if (Options.DiscriminatorMappings.Count > 0 || Options.TypeAliases.Count > 0)
+            _engine.SetValue("Type", new JsTypeGlobal(Options.DiscriminatorMappings, Options.TypeAliases, Options.NamespaceMappings));
+
         foreach (var configurator in Options.EngineConfigurators)
             configurator(_engine);
     }

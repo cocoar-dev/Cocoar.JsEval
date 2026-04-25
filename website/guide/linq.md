@@ -1,4 +1,4 @@
-# JS → LINQ (IQueryable)
+﻿# JS → LINQ (IQueryable)
 
 `Cocoar.JsEval.Linq` translates JavaScript arrow functions into **real .NET Expression Trees**, so any `IQueryable<T>` provider — Marten, EF Core, LINQ2DB, NHibernate, Cosmos, RavenDB, … — can convert them into native SQL or the provider's query language.
 
@@ -595,3 +595,93 @@ users.where(u => u.Status !== 'Archived')  // inequality works too
 The translator **auto-coerces** the literal side into a typed enum `Expression.Constant` when the other side is an enum property. Output is the ORM-neutral native form (`u.Status == UserStatus.Active` — **without** the C# compiler's implicit `Convert(enum, Int32)` wrapper), so providers storing enums as strings (Marten with `EnumStorage.AsString`, EF Core with `HasConversion<string>()`) translate correctly without a rewrite pass.
 
 String-to-enum matching is case-insensitive (`'Active'` = `'active'` = `'ACTIVE'`). Invalid names throw with a clear message listing the valid values.
+
+## Polymorphic Types — Discriminator Mapping
+
+When a `IQueryable<T>` covers multiple entity kinds, scripts use `Type.Is(a, 'dog')` and `Type.IsOneOf(a, ['dog','cat'])` to filter by type. The translator intercepts these calls and generates the appropriate LINQ expression for the active discrimination strategy.
+
+### Setup
+
+#### With JsEval builder (DI / full engine)
+
+```csharp
+// With Monaco IntelliSense narrowing — view types for Monaco only, not stored in the DB
+public class PersonView  : Participant { }
+public class CompanyView : Participant { }
+
+services.AddJsEval(b => b
+    .AddLinq()
+    .AddDiscriminatorMappings<Participant>("ParticipantType",
+        ("person",  typeof(PersonView)),
+        ("company", typeof(CompanyView))));
+
+// Without Monaco narrowing — Type.Is returns a plain boolean
+services.AddJsEval(b => b
+    .AddLinq()
+    .AddDiscriminatorMappings<Participant>("ParticipantType", "person", "company"));
+```
+
+`AddDiscriminatorMappings` registers a `Type` JS global so `Type.Is` and `Type.IsOneOf` work in **all** scripts — not just LINQ predicates.
+
+Pass the mappings to `TranslationOptions` for LINQ translation:
+
+```csharp
+var options = new TranslationOptions
+{
+    DiscriminatorMappings = engine.Options.DiscriminatorMappings
+};
+
+using (JsLinqContext.Scope(engine, options))
+    session.Query<Participant>().Where(p => Type.Is(p, 'person') && p.Firstname.startsWith('A'));
+```
+
+#### Without the builder (translator-only)
+
+```csharp
+// DiscriminatorMapping is in Cocoar.JsEval.Engine
+var options = new TranslationOptions
+{
+    DiscriminatorMappings =
+    [
+        new(typeof(Participant), "person",  typeof(PersonView),  "ParticipantType"),
+        new(typeof(Participant), "company", typeof(CompanyView), "ParticipantType"),
+    ]
+};
+
+var expr = JsExpressionTranslator.Translate<Participant, bool>(jsFn, engine, options);
+```
+
+### `Type.Is()` — single type check
+
+```typescript
+(p) => Type.Is(p, 'person')
+// → p.ParticipantType == "person"
+// Marten SQL: WHERE data->>'ParticipantType' = 'person'
+```
+
+### `Type.IsOneOf()` — multiple types
+
+`Type.IsOneOf(a, ['v1','v2'])` is shorthand for `Type.Is(a,'v1') || Type.Is(a,'v2')`. The translator expands it to an `OrElse` chain:
+
+```typescript
+(p) => Type.IsOneOf(p, ['person', 'company'])
+// → p.ParticipantType == "person" || p.ParticipantType == "company"
+// Marten SQL: WHERE data->>'ParticipantType' = 'person' OR data->>'ParticipantType' = 'company'
+```
+
+### AND conditions
+
+All properties live on the flat base type, so no type casting is needed on the right side of `&&`:
+
+```typescript
+(p) => Type.Is(p, 'person') && p.Firstname.startsWith('A')
+// → p.ParticipantType == "person" && p.Firstname.StartsWith("A")
+// Marten SQL: WHERE data->>'ParticipantType' = 'person' AND data->>'Firstname' LIKE 'A%'
+
+(p) => Type.IsOneOf(p, ['person', 'company']) && p.Name.startsWith('A')
+// → (p.ParticipantType == "person" || p.ParticipantType == "company") && p.Name.StartsWith("A")
+```
+
+### IntelliSense in Monaco
+
+Register the same mappings on the `DefinitionBuilder` to generate a `declare const Type` with TypeScript type-predicate overloads. See [Discriminator overloads in TsDefinition](./ts-definitions#discriminator-overloads) for the full setup.

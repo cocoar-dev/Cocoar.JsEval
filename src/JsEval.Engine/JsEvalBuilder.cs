@@ -134,4 +134,38 @@ public sealed class JsEvalBuilder
         Options.MapNamespace(sourcePrefix, targetPrefix);
         return this;
     }
+
+    /// <summary>
+    /// Registers discriminator mappings for a polymorphic base type where all values
+    /// share a common string property as the discriminator field (Marten, flat documents).
+    /// LINQ generates <c>p.PropertyName == value</c>; Monaco narrows to <paramref name="concreteType"/>.
+    /// <code>
+    /// .AddDiscriminatorMappings&lt;Participant&gt;("ParticipantType",
+    ///     ("person",  typeof(PersonView)),
+    ///     ("company", typeof(CompanyView)))
+    /// </code>
+    /// </summary>
+    public JsEvalBuilder AddDiscriminatorMappings<TBase>(
+        string propertyName, params (string value, Type concreteType)[] mappings)
+    {
+        foreach (var (value, concreteType) in mappings)
+            Options.DiscriminatorMappings.Add(
+                new DiscriminatorMapping(typeof(TBase), value, concreteType, propertyName));
+        return this;
+    }
+
+    /// <summary>
+    /// Registers property-based discriminator mappings without Monaco narrowing.
+    /// LINQ generates <c>p.PropertyName == value</c>; <c>Type.Is</c> returns a plain boolean.
+    /// <code>
+    /// .AddDiscriminatorMappings&lt;Participant&gt;("ParticipantType", "person", "company", "guest")
+    /// </code>
+    /// </summary>
+    public JsEvalBuilder AddDiscriminatorMappings<TBase>(string propertyName, params string[] values)
+    {
+        foreach (var value in values)
+            Options.DiscriminatorMappings.Add(
+                new DiscriminatorMapping(typeof(TBase), value, propertyName));
+        return this;
+    }
 }

@@ -14,6 +14,13 @@ internal static class TranslatorTestHelper
         return JsExpressionTranslator.Translate<T, TResult>(jsFn, engine);
     }
 
+    public static Expression<Func<T, TResult>> Translate<T, TResult>(string jsArrowFunction, TranslationOptions options)
+    {
+        var engine = new Jint.Engine();
+        var jsFn = engine.Evaluate(jsArrowFunction);
+        return JsExpressionTranslator.Translate<T, TResult>(jsFn, engine, options);
+    }
+
     /// <summary>Renders an Expression tree using its built-in ToString(), which is deterministic and readable.</summary>
     public static string Render<T, TResult>(Expression<Func<T, TResult>> expr) => expr.ToString();
 }

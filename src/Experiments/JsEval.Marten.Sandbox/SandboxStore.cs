@@ -30,7 +30,7 @@ internal static class SandboxStore
         Console.WriteLine();
     }
 
-    public static void PrintSql(IQueryable<User> query)
+    public static void PrintSql<T>(IQueryable<T> query)
     {
         try
         {

@@ -87,13 +87,58 @@ public static class JsExpressionTranslator
         public readonly TranslationOptions Options;
         public readonly List<ParameterExpression> ParamStack = new();
 
+        // Active narrowing frames per parameter, pushed/popped around AND right-hand sides.
+        // Each frame is the set of concrete types the parameter may be (from TypeIs nodes
+        // collected from the AND's left operand, across both AND and OR sub-trees).
+        private readonly Dictionary<ParameterExpression, Stack<List<Type>>> _narrowings = new();
+
+        private IReadOnlyDictionary<string, Type>? _namespaceMapped;
+
         public Context(Jint.Engine? engine, TranslationOptions options)
         { Engine = engine; Options = options; }
 
         public Context Push(ParameterExpression p) { ParamStack.Add(p); return this; }
 
+        public IReadOnlyDictionary<string, Type> GetNamespaceMapped()
+        {
+            if (_namespaceMapped != null) return _namespaceMapped;
+            if (Options.NamespaceMappings.Count == 0 || Options.DiscriminatorMappings.Count == 0)
+                return _namespaceMapped = new Dictionary<string, Type>();
+
+            var types = Options.DiscriminatorMappings.Select(m => m.ConcreteType).Where(t => t != null).Select(t => t!)
+                .Concat(Options.DiscriminatorMappings.Select(m => m.BaseType))
+                .Distinct();
+            var resolutions = TypeAliasResolver.Resolve(types, Options.TypeAliases, Options.NamespaceMappings);
+            var dict = new Dictionary<string, Type>(StringComparer.Ordinal);
+            foreach (var r in resolutions)
+            {
+                if (r.Source != TypeAliasResolutionSource.NamespaceMapping) continue;
+                var key = string.IsNullOrEmpty(r.MappedNamespace)
+                    ? r.ShortName
+                    : r.MappedNamespace + "." + r.ShortName;
+                dict.TryAdd(key, r.Type);
+            }
+            return _namespaceMapped = dict;
+        }
+
         public ParameterExpression? Find(string name) =>
             ParamStack.LastOrDefault(p => p.Name == name);
+
+        public void PushNarrowing(ParameterExpression param, List<Type> types)
+        {
+            if (!_narrowings.TryGetValue(param, out var stack))
+                _narrowings[param] = stack = new();
+            stack.Push(types);
+        }
+
+        public void PopNarrowing(ParameterExpression param)
+        {
+            if (_narrowings.TryGetValue(param, out var stack) && stack.Count > 0)
+                stack.Pop();
+        }
+
+        public List<Type>? GetNarrowings(ParameterExpression param) =>
+            _narrowings.TryGetValue(param, out var stack) && stack.Count > 0 ? stack.Peek() : null;
     }
 
     private static ParameterExpression BuildParameter(IFunction decl, Type t)
@@ -164,9 +209,50 @@ public static class JsExpressionTranslator
     {
         var target = Visit((AstExpr)me.Object, ctx);
         var propName = ResolveMemberName(me);
-        var prop = ReflectionCache.GetProperty(target.Type, propName)
-            ?? throw new InvalidOperationException($"Property '{propName}' not found on {target.Type.Name}");
-        return LinqExpr.Property(target, prop);
+
+        var prop = ReflectionCache.GetProperty(target.Type, propName);
+        if (prop != null)
+            return LinqExpr.Property(target, prop);
+
+        // Property not on the declared type — try narrowed subtypes (from active
+        // discriminator narrowing frames pushed by VisitLogical AND).
+        if (target is ParameterExpression param)
+        {
+            var narrowings = ctx.GetNarrowings(param);
+            if (narrowings != null)
+            {
+                var narrowed = TryResolveViaIntersection(param, propName, narrowings);
+                if (narrowed != null) return narrowed;
+            }
+        }
+
+        throw new InvalidOperationException($"Property '{propName}' not found on {target.Type.Name}");
+    }
+
+    /// <summary>
+    /// Resolves <paramref name="propName"/> across all types in <paramref name="narrowings"/>.
+    /// Returns <c>null</c> if any type lacks the property; throws if the property exists on
+    /// all types but with conflicting CLR types. On success emits
+    /// <c>Property(Convert(param, narrowings[0]), prop)</c>.
+    /// </summary>
+    private static LinqExpr? TryResolveViaIntersection(
+        ParameterExpression param, string propName, List<Type> narrowings)
+    {
+        PropertyInfo? resolved = null;
+        foreach (var nt in narrowings)
+        {
+            var p = ReflectionCache.GetProperty(nt, propName);
+            if (p == null) return null;
+            if (resolved == null)
+                resolved = p;
+            else if (resolved.PropertyType != p.PropertyType)
+                throw new InvalidOperationException(
+                    $"Ambiguous property '{propName}': CLR type differs across narrowed subtypes " +
+                    $"({resolved.DeclaringType!.Name}: {resolved.PropertyType.Name} vs " +
+                    $"{p.DeclaringType!.Name}: {p.PropertyType.Name})");
+        }
+        return resolved == null ? null
+            : LinqExpr.Property(LinqExpr.Convert(param, narrowings[0]), resolved);
     }
 
     /// <summary>
@@ -195,6 +281,12 @@ public static class JsExpressionTranslator
         // marshal decimal → JS number and lose precision).
         if (TryInterceptLinqTypedLiteral(ce, out var interception))
             return interception!;
+
+        // Intercept `Type.Is(param, 'value')` and `Type.IsOneOf(param, ['v1','v2'])`.
+        if (TryInterceptDiscriminatorIs(ce, callee, ctx, out var typeIs))
+            return typeIs!;
+        if (TryInterceptDiscriminatorIsOneOf(ce, callee, ctx, out var typeIsOneOf))
+            return typeIsOneOf!;
 
         var target = Visit((AstExpr)callee.Object, ctx);
         return VisitCallOnTarget(target, callee, ce, ctx);
@@ -599,15 +691,56 @@ public static class JsExpressionTranslator
 
     private static LinqExpr VisitLogical(LogicalExpression le, Context ctx)
     {
-        var left = Visit((AstExpr)le.Left, ctx);
-        var right = Visit((AstExpr)le.Right, ctx);
+        if (le.Operator == Operator.LogicalAnd)
+        {
+            var left = Visit((AstExpr)le.Left, ctx);
+
+            // Collect all TypeIs nodes from the left operand (spanning both AndAlso
+            // and OrElse sub-trees) and push them as narrowing frames so that the
+            // right operand can resolve subtype-only members via TryResolveViaIntersection.
+            var narrowings = new Dictionary<ParameterExpression, List<Type>>();
+            CollectNarrowings(left, narrowings);
+            foreach (var (param, types) in narrowings)
+                ctx.PushNarrowing(param, types);
+
+            var right = Visit((AstExpr)le.Right, ctx);
+
+            foreach (var (param, _) in narrowings)
+                ctx.PopNarrowing(param);
+
+            return LinqExpr.AndAlso(NormalizeToBool(left), NormalizeToBool(right));
+        }
+
+        var leftExpr = Visit((AstExpr)le.Left, ctx);
+        var rightExpr = Visit((AstExpr)le.Right, ctx);
         return le.Operator switch
         {
-            Operator.LogicalAnd        => LinqExpr.AndAlso(NormalizeToBool(left), NormalizeToBool(right)),
-            Operator.LogicalOr         => LinqExpr.OrElse(NormalizeToBool(left), NormalizeToBool(right)),
-            Operator.NullishCoalescing => BuildCoalesce(left, right),
+            Operator.LogicalOr         => LinqExpr.OrElse(NormalizeToBool(leftExpr), NormalizeToBool(rightExpr)),
+            Operator.NullishCoalescing => BuildCoalesce(leftExpr, rightExpr),
             _ => throw new NotSupportedException($"Logical operator {le.Operator} not supported")
         };
+    }
+
+    /// <summary>
+    /// Recursively collects all <c>TypeIs(param, T)</c> nodes reachable via
+    /// <c>AndAlso</c> or <c>OrElse</c> sub-trees. Used to build the narrowing
+    /// frame pushed into the AND right operand.
+    /// </summary>
+    private static void CollectNarrowings(LinqExpr expr, Dictionary<ParameterExpression, List<Type>> result)
+    {
+        switch (expr)
+        {
+            case TypeBinaryExpression { NodeType: ExpressionType.TypeIs } tb
+                when tb.Expression is ParameterExpression p:
+                if (!result.TryGetValue(p, out var list)) result[p] = list = [];
+                if (!list.Contains(tb.TypeOperand)) list.Add(tb.TypeOperand);
+                break;
+            case System.Linq.Expressions.BinaryExpression
+                { NodeType: ExpressionType.AndAlso or ExpressionType.OrElse } bin:
+                CollectNarrowings(bin.Left, result);
+                CollectNarrowings(bin.Right, result);
+                break;
+        }
     }
 
     /// <summary>
@@ -811,4 +944,99 @@ public static class JsExpressionTranslator
     private static bool IsNumeric(Type t) =>
         t == typeof(int) || t == typeof(long) || t == typeof(double) ||
         t == typeof(decimal) || t == typeof(float) || t == typeof(short) || t == typeof(byte);
+
+    /// <summary>
+    /// Resolves a discriminator string value to a LINQ expression node for the given parameter.
+    /// For CLR-type mappings produces <c>TypeIs(param, ConcreteType)</c>;
+    /// for property-based mappings produces <c>param.PropertyName == value</c>.
+    /// Lookup order: explicit DiscriminatorMapping → TypeAliases → namespace-mapped names.
+    /// </summary>
+    private static bool TryResolveDiscriminatorNode(
+        string value, ParameterExpression param, Context ctx, out LinqExpr? node)
+    {
+        var mapping = ctx.Options.DiscriminatorMappings
+            .FirstOrDefault(m => m.BaseType.IsAssignableFrom(param.Type) && m.Value == value);
+        if (mapping != null)
+        {
+            node = mapping.PropertyName != null
+                ? LinqExpr.Equal(LinqExpr.Property(param, mapping.PropertyName), LinqExpr.Constant(value))
+                : LinqExpr.TypeIs(param, mapping.ConcreteType!);
+            return true;
+        }
+
+        // TypeAlias / namespace-mapping fallbacks always produce a CLR TypeIs check.
+        if (ctx.Options.TypeAliases.TryGetValue(value, out var aliasedType))
+        { node = LinqExpr.TypeIs(param, aliasedType); return true; }
+
+        var namespaceMapped = ctx.GetNamespaceMapped();
+        if (namespaceMapped.TryGetValue(value, out var nsMappedType))
+        { node = LinqExpr.TypeIs(param, nsMappedType); return true; }
+
+        node = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Intercepts <c>Type.Is(param, 'value')</c>.
+    /// CLR-type mapping → <c>TypeIs(param, ConcreteType)</c>.
+    /// Property-based mapping → <c>param.PropertyName == "value"</c>.
+    /// Falls through when no match is found.
+    /// </summary>
+    private static bool TryInterceptDiscriminatorIs(
+        CallExpression ce, AstMember callee, Context ctx, out LinqExpr? result)
+    {
+        result = null;
+        if (callee.Object is not Identifier { Name: "Type" }) return false;
+        if (callee.Property is not Identifier { Name: "Is" }) return false;
+        if (ce.Arguments.Count != 2) return false;
+        if (ce.Arguments[0] is not Identifier paramId) return false;
+        if (ce.Arguments[1] is not StringLiteral sl) return false;
+        var param = ctx.Find(paramId.Name);
+        if (param == null) return false;
+
+        if (!TryResolveDiscriminatorNode(sl.Value, param, ctx, out var node))
+            return false;
+
+        result = node;
+        return true;
+    }
+
+    /// <summary>
+    /// Intercepts <c>Type.IsOneOf(param, ['v1','v2',…])</c>, expanding it to an
+    /// <c>OrElse</c> chain — one node per value, each resolved via
+    /// <see cref="TryResolveDiscriminatorNode"/> (CLR-type or property-based).
+    /// AND-narrowing on the right side of <c>&amp;&amp;</c> works automatically because
+    /// <c>CollectNarrowings</c> already traverses <c>OrElse</c> trees.
+    /// Throws when any element is not a string literal or has no matching mapping.
+    /// </summary>
+    private static bool TryInterceptDiscriminatorIsOneOf(
+        CallExpression ce, AstMember callee, Context ctx, out LinqExpr? result)
+    {
+        result = null;
+        if (callee.Object is not Identifier { Name: "Type" }) return false;
+        if (callee.Property is not Identifier { Name: "IsOneOf" }) return false;
+        if (ce.Arguments.Count != 2) return false;
+        if (ce.Arguments[0] is not Identifier paramId) return false;
+        if (ce.Arguments[1] is not ArrayExpression arr) return false;
+        var param = ctx.Find(paramId.Name);
+        if (param == null) return false;
+
+        var nodes = new List<LinqExpr>();
+        foreach (var element in arr.Elements)
+        {
+            if (element is not StringLiteral sl)
+                throw new InvalidOperationException(
+                    "Type.IsOneOf: all array elements must be string literals.");
+            if (!TryResolveDiscriminatorNode(sl.Value, param, ctx, out var node))
+                throw new InvalidOperationException(
+                    $"Type.IsOneOf: no discriminator mapping found for '{sl.Value}' on '{param.Type.Name}'.");
+            nodes.Add(node!);
+        }
+
+        if (nodes.Count == 0)
+            throw new InvalidOperationException("Type.IsOneOf: array must not be empty.");
+
+        result = nodes.Skip(1).Aggregate(nodes[0], LinqExpr.OrElse);
+        return true;
+    }
 }

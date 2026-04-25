@@ -183,6 +183,9 @@ await Run("5. Dependency tracking: which properties does the script touch?", ses
 await OptionalChainingScenario.Seed(store);
 await Run("6. Optional chaining against Marten (v3.1.0 regression case)", OptionalChainingScenario.Run);
 
+await DiscriminatorMappingScenario.Seed(store);
+await Run("7. Discriminator mapping: Type.Is / Type.IsOneOf + AND-narrowing", DiscriminatorMappingScenario.Run);
+
 Console.WriteLine();
 Console.WriteLine("=== DONE ===");
 

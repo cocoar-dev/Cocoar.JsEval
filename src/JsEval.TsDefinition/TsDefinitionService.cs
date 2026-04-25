@@ -54,6 +54,16 @@ public class TsDefinitionService
                     defBuilder.AddType(kv.Value, kv.Key);
                 foreach (var mapping in _engineOptions.NamespaceMappings)
                     defBuilder.MapNamespace(mapping.Source, mapping.Target);
+
+                // Mirror CLR-type discriminator mappings → `declare const Type { Is(...): value is Concrete }`.
+                // Property-based mappings (PropertyName != null, ConcreteType == null) have no CLR subtype
+                // to narrow to, so they fall back to the generic boolean overload — skip them here.
+                foreach (var grp in _engineOptions.DiscriminatorMappings
+                    .Where(m => m.ConcreteType != null)
+                    .GroupBy(m => m.BaseType))
+                    defBuilder.AddDiscriminatorMappings(
+                        grp.Key,
+                        grp.Select(m => (m.Value, m.ConcreteType!)).ToArray());
             }
 
             foreach (var md in definitions)

@@ -127,6 +127,10 @@ await using (var seedDb = new AppDb(options))
     await OptionalChainingScenario.Seed(seedDb);
 await Run("4. Optional chaining against EF Core (v3.1.0 regression case)", OptionalChainingScenario.Run);
 
+await using (var seedDb = new AppDb(options))
+    await DiscriminatorMappingScenario.Seed(seedDb);
+await Run("5. Discriminator mapping: Type.Is / Type.IsOneOf + AND-narrowing", DiscriminatorMappingScenario.Run);
+
 Console.WriteLine();
 Console.WriteLine("=== DONE ===");
 

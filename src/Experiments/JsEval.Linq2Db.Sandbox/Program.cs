@@ -40,6 +40,7 @@ using (var setup = new DataConnection(dataOptions))
     ]);
 
     OptionalChainingScenario.Seed(setup);
+    DiscriminatorMappingScenario.Seed(setup);
 }
 
 await Run("1. JS -> Expression -> LINQ2DB SQLite: byte-identical SQL", db =>
@@ -134,6 +135,7 @@ await Run("3. Dependency tracking: reactive re-run matrix", db =>
 });
 
 await Run("4. Optional chaining against LINQ2DB (v3.1.0 regression case)", OptionalChainingScenario.Run);
+await Run("5. Discriminator mapping: Type.Is / Type.IsOneOf + AND-narrowing", DiscriminatorMappingScenario.Run);
 
 Console.WriteLine();
 Console.WriteLine("=== DONE ===");

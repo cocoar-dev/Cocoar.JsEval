@@ -24,6 +24,9 @@ public class TypeScriptRenderer
     // 'declare' modifier, no namespace wrapper.
     private readonly List<TypeDefinition> _rootScopeTypes = new();
 
+    // Discriminator mappings grouped by base type — used to inject is() overloads.
+    private Dictionary<Type, List<(string Value, Type ConcreteType)>> _discriminatorMappingsByBase = [];
+
     private static string? BuildDocComments(int indent, params string[] lines) =>
         BuildDocComments(indent, lines.AsEnumerable());
 
@@ -216,6 +219,7 @@ public class TypeScriptRenderer
 
         strb.AppendLine(RenderBody(typeDefinition, indent + 4));
         strb.AppendLine(RenderBody(missingDefinitions, indent + 4));
+
         strb.AppendLine($"{indentString}}}");
         return strb.ToString();
     }
@@ -495,6 +499,12 @@ public class TypeScriptRenderer
                 r => r.Type,
                 r => (r.MappedNamespace, r.ShortName));
 
+        _discriminatorMappingsByBase = definitionBuilder.GetDiscriminatorMappings()
+            .GroupBy(m => m.BaseType)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(m => (m.Value, m.ConcreteType)).ToList());
+
         foreach (var calculatedType in AllowedTypes)
         {
             var tdesc = TypeDefinition.FromType(calculatedType, AllowedTypes);
@@ -579,9 +589,9 @@ public class TypeScriptRenderer
         foreach (var definition in namespaceDefinition.Namespaces.OrderBy(n => n.Name))
             dict.Add($"{definition.Name}.d.ts", Render(definition));
 
-        // Emit root-scope types (aliased or mapped to empty namespace) as a
-        // single file with each declaration at module scope.
-        if (_rootScopeTypes.Count > 0)
+        // Emit root-scope types (aliased or mapped to empty namespace) and/or the
+        // `Type` discriminator const as a single ambient declaration file.
+        if (_rootScopeTypes.Count > 0 || _discriminatorMappingsByBase.Count > 0)
             dict.Add("globals.d.ts", RenderRootScope());
 
         dict.Add("extensions.d.ts", RenderBuiltInExtensions());
@@ -600,7 +610,70 @@ public class TypeScriptRenderer
             var rendered = Render(tdesc, indent: 0);
             strb.AppendLine($"declare {rendered.TrimStart()}");
         }
+        if (_discriminatorMappingsByBase.Count > 0)
+            strb.AppendLine(RenderTypeConstDeclaration());
         return strb.ToString();
+    }
+
+    /// <summary>
+    /// Emits <c>declare const Type: { Is(…); IsOneOf(…); }</c> plus a conditional
+    /// type alias per base type so TypeScript can narrow the union correctly:
+    /// <code>
+    /// type AnimalByDiscriminator&lt;D extends 'dog' | 'cat'&gt; =
+    ///     D extends 'dog' ? Dog :
+    ///     D extends 'cat' ? Cat : never;
+    ///
+    /// declare const Type: {
+    ///     Is(value: Animal, d: 'dog'): value is Dog;
+    ///     IsOneOf&lt;D extends 'dog' | 'cat'&gt;(value: Animal, ds: readonly D[]): value is AnimalByDiscriminator&lt;D&gt;;
+    ///     Is(value: object, d: string): boolean;
+    ///     IsOneOf(value: object, ds: string[]): boolean;
+    /// };
+    /// </code>
+    /// </summary>
+    private string RenderTypeConstDeclaration()
+    {
+        var sb = new StringBuilder();
+
+        // Conditional type alias per base type — needed for IsOneOf<D> return type.
+        foreach (var (baseType, mappings) in _discriminatorMappingsByBase)
+        {
+            var baseDef = TypeDefinition.FromType(baseType, AllowedTypes);
+            var baseTypeName = BuildTypeString(baseDef);
+            var union = string.Join(" | ", mappings.Select(m => $"'{m.Value}'"));
+            var mapTypeName = $"{baseType.Name}ByDiscriminator";
+
+            sb.Append($"type {mapTypeName}<D extends {union}> =");
+            foreach (var (value, concreteType) in mappings)
+            {
+                var concreteDef = TypeDefinition.FromType(concreteType, AllowedTypes);
+                sb.AppendLine();
+                sb.Append($"    D extends '{value}' ? {BuildTypeString(concreteDef)} :");
+            }
+            sb.AppendLine();
+            sb.AppendLine("    never;");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("declare const Type: {");
+        foreach (var (baseType, mappings) in _discriminatorMappingsByBase)
+        {
+            var baseDef = TypeDefinition.FromType(baseType, AllowedTypes);
+            var baseTypeName = BuildTypeString(baseDef);
+            var union = string.Join(" | ", mappings.Select(m => $"'{m.Value}'"));
+            var mapTypeName = $"{baseType.Name}ByDiscriminator";
+
+            foreach (var (value, concreteType) in mappings)
+            {
+                var concreteDef = TypeDefinition.FromType(concreteType, AllowedTypes);
+                sb.AppendLine($"    Is(value: {baseTypeName}, d: '{value}'): value is {BuildTypeString(concreteDef)};");
+            }
+            sb.AppendLine($"    IsOneOf<D extends {union}>(value: {baseTypeName}, ds: readonly D[]): value is {mapTypeName}<D>;");
+        }
+        sb.AppendLine("    Is(value: object, d: string): boolean;");
+        sb.AppendLine("    IsOneOf(value: object, ds: string[]): boolean;");
+        sb.Append("};");
+        return sb.ToString();
     }
 
     private string RenderBuiltInExtensions()

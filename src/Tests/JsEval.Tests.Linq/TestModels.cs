@@ -1,5 +1,23 @@
 namespace Cocoar.JsEval.Tests.Linq;
 
+// --- Polymorphic animal hierarchy for discriminator mapping tests ---
+
+public class Animal { public string Name { get; set; } = ""; }
+
+public class Dog : Animal
+{
+    public int BarkVolume { get; set; }
+    public string Breed { get; set; } = "";
+}
+
+public class Cat : Animal
+{
+    public int BarkVolume { get; set; }  // shared with Dog — for OR-intersection tests
+    public bool IndoorOnly { get; set; }
+}
+
+public class Bird : Animal { public string Species { get; set; } = ""; }
+
 public enum UserStatus { None, Active, Archived, Deleted }
 
 public class TestUser

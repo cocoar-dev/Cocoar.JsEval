@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file. For the authoritative source, see [`CHANGELOG.md`](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/CHANGELOG.md) in the repo root.
 
+## [3.2.0-beta]
+
+### Added
+- **`Type.IsOneOf(value, ['a','b'])`** — shorthand for multiple OR'd `Type.Is` calls. Expands to an `OrElse` chain in LINQ. Monaco narrows to the correct union type via a conditional-type overload in the generated `.d.ts`.
+- **`AddDiscriminatorMappings<T>(propertyName, ...)`** — property-based discriminator mappings; the property name is specified once. With view types for Monaco narrowing: `("ParticipantType", ("person", typeof(PersonView)), …)`. Without: `("ParticipantType", "person", "company")`. LINQ generates `p.ParticipantType == "person"` — works with any provider including Marten.
+- **`JsEngine` auto-registers `Type` global** when discriminator mappings are configured.
+- **`DefinitionBuilder.AddDiscriminatorMappings`** — emits `declare const Type` with per-value `Is()` overloads and a conditional-type `IsOneOf<D>()` overload. `TsDefinitionService` mirrors engine mappings automatically in the DI path.
+- **Namespace-mapping fallback in `Type.Is`** — lookup order: explicit mapping → type alias → namespace-mapped name.
+
+### Changed
+- `DiscriminatorMapping` is now a `class` with nullable `ConcreteType` / `PropertyName`; `IsMatch` delegate is pre-compiled in the constructor.
+
+### Removed
+- `DiscriminatorEntry` — replaced by native C# tuple and `string` syntax in the new builder overloads.
+
 ## [3.2.0]
 
 ### Added

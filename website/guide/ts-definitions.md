@@ -225,6 +225,74 @@ C# types are automatically mapped to TypeScript equivalents:
 
 `TsDefinitionService` caches its output internally. The first call to `GetTsDefinitions()` or `GetTsImports()` does the reflection work; subsequent calls return the cached result. Since type definitions don't change at runtime, this is safe.
 
+## Discriminator Overloads {#discriminator-overloads}
+
+`Type.Is(p, 'person')` is an engine-level feature configured via `JsEvalBuilder.AddDiscriminatorMappings`. `TsDefinitionService` picks up those mappings automatically and emits the `declare const Type` declaration — no separate `DefinitionBuilder` call needed in the DI path.
+
+### DI path (TsDefinitionService)
+
+```csharp
+// View types for Monaco IntelliSense only — not stored in the DB
+public class PersonView  : Participant { }
+public class CompanyView : Participant { }
+
+services.AddJsEval(b => b
+    .AddDiscriminatorMappings<Participant>("ParticipantType",
+        ("person",  typeof(PersonView)),
+        ("company", typeof(CompanyView))));
+```
+
+`TsDefinitionService.GetTsDefinitions()` mirrors `JsEngineOptions.DiscriminatorMappings` into the `DefinitionBuilder` automatically. The `declare const Type` block appears in `globals.d.ts` without any extra setup.
+
+### Standalone path (DefinitionBuilder only)
+
+When using `DefinitionBuilder` directly (without DI / `TsDefinitionService`), register the mappings on the builder:
+
+```csharp
+var builder = new DefinitionBuilder()
+    .AddType<Participant>()
+    .AddType<PersonView>()
+    .AddType<CompanyView>()
+    .AddDiscriminatorMappings<Participant>(
+        ("person",  typeof(PersonView)),
+        ("company", typeof(CompanyView)));
+
+var defs = builder.Render();
+```
+
+### Generated output
+
+Both paths emit the same result in `globals.d.ts`:
+
+```typescript
+type ParticipantByDiscriminator<D extends 'person' | 'company'> =
+    D extends 'person'  ? PersonView  :
+    D extends 'company' ? CompanyView :
+    never;
+
+declare const Type: {
+    Is(value: Participant, d: 'person'):  value is PersonView;
+    Is(value: Participant, d: 'company'): value is CompanyView;
+    IsOneOf<D extends 'person' | 'company'>(value: Participant, ds: readonly D[]): value is ParticipantByDiscriminator<D>;
+    Is(value: object, d: string): boolean;
+    IsOneOf(value: object, ds: string[]): boolean;
+};
+```
+
+TypeScript's control-flow analysis then narrows the parameter correctly in the editor:
+
+```typescript
+// Monaco knows p is PersonView → Firstname/Lastname autocomplete
+(p) => Type.Is(p, 'person') && p.Firstname.startsWith('A')
+
+// Monaco narrows to PersonView | CompanyView → Name resolves (on base Participant)
+(p) => Type.IsOneOf(p, ['person', 'company']) && p.Name.startsWith('A')
+```
+
+::: tip Keep C# and TypeScript in sync
+Pass the same discriminator values to both `TranslationOptions.DiscriminatorMappings` (LINQ translator) and `JsEvalBuilder.AddDiscriminatorMappings` (runtime + IntelliSense). A mismatch means Monaco accepts a script the translator rejects (or vice versa).
+:::
+
 ## Extension Methods
 
 If your engine uses extension methods (via `AddExtensionMethods<T>()` in the builder), pass the `JsEngineOptions` to `TsDefinitionService` so it can include them in the generated definitions:

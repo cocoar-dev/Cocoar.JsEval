@@ -121,6 +121,33 @@ public class DefinitionBuilder
         return this;
     }
 
+    private readonly List<(Type BaseType, string Value, Type ConcreteType)> _discriminatorMappings = [];
+
+    /// <summary>
+    /// Registers discriminator mappings for a polymorphic base type. For each mapping
+    /// TsDefinition emits an overloaded <c>Is(value: BaseType, d: 'value'): value is ConcreteType</c>
+    /// signature on the global <c>declare const Type</c> object so Monaco can narrow
+    /// the parameter type correctly after a <c>Type.Is(a, 'dog')</c> call.
+    /// </summary>
+    public DefinitionBuilder AddDiscriminatorMappings(
+        Type baseType, params (string value, Type concreteType)[] mappings)
+    {
+        foreach (var (value, concreteType) in mappings)
+        {
+            AddTypes(baseType, concreteType);
+            _discriminatorMappings.Add((baseType, value, concreteType));
+        }
+        return this;
+    }
+
+    /// <inheritdoc cref="AddDiscriminatorMappings(Type, ValueTuple{string, Type}[])"/>
+    public DefinitionBuilder AddDiscriminatorMappings<TBase>(
+        params (string value, Type concreteType)[] mappings)
+        => AddDiscriminatorMappings(typeof(TBase), mappings);
+
+    internal IReadOnlyList<(Type BaseType, string Value, Type ConcreteType)> GetDiscriminatorMappings()
+        => _discriminatorMappings;
+
     internal List<Type> GetTypesToProcess()
     {
         foreach (var type in TypesToProcess)

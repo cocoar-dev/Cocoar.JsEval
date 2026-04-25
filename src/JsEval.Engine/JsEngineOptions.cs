@@ -82,6 +82,13 @@ public sealed class JsEngineOptions
     internal List<Action<Jint.Engine>> EngineConfigurators { get; } = [];
 
     /// <summary>
+    /// Discriminator mappings for polymorphic types. When non-empty, <see cref="JsEngine"/>
+    /// registers a <c>Type</c> global so scripts can call <c>Type.Is(a, 'dog')</c>.
+    /// Populated by <c>JsEvalBuilder.AddDiscriminatorMappings</c>.
+    /// </summary>
+    public List<DiscriminatorMapping> DiscriminatorMappings { get; } = [];
+
+    /// <summary>
     /// Registers a callback invoked after the underlying Jint engine is created,
     /// giving add-on packages a hook to register globals, extension scripts, or
     /// other setup without the core needing to know about them.
