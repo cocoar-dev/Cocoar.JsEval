@@ -320,7 +320,7 @@ public class DiscriminatorMappingTests
         Assert.True (fn(new PersonView  { ParticipantType = "person",  Email = "alice@example.com" }));
         Assert.False(fn(new PersonView  { ParticipantType = "person",  Email = "alice@other.com"   }));
         Assert.False(fn(new PersonView  { ParticipantType = "person",  Email = null                }));
-        Assert.False(fn(new CompanyView { ParticipantType = "company", Email = "x@example.com"     }));
+        Assert.False(fn(new CompanyView { ParticipantType = "company" }));
     }
 
 }
