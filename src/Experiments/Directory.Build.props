@@ -1,0 +1,12 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\'))" />
+
+  <!-- Sandbox/experiment projects are not shipped — silence all analyzer and compiler noise. -->
+  <PropertyGroup>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- CS8714: nullable/notnull constraint mismatch in Marten generic helpers -->
+    <NoWarn>$(NoWarn);CS8714</NoWarn>
+  </PropertyGroup>
+</Project>

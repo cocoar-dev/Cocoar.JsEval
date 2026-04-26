@@ -10,9 +10,14 @@
     <!-- CA1816: Dispose pattern in test fixtures -->
     <!-- CA1822: Static method suggestions in test helpers -->
     <!-- CA1852: Sealed type suggestions for test types -->
-    <!-- CA1310: String comparison culture in tests -->
-    <!-- CA1305: Format provider in test diagnostics -->
+    <!-- CA1310/CA1311/CA1304/CA1305: String/culture in test assertions -->
+    <!-- CA1847/CA1862/CA1866: Micro-optimizations irrelevant in test code -->
+    <!-- CA1861: Static readonly arrays — overkill for test data -->
+    <!-- CA2249: string.Contains vs IndexOf — test assertions -->
+    <!-- CA2263: Prefer generic overload — test helpers use non-generic Type overloads intentionally -->
+    <!-- CA1711: Type names ending in 'Enum' — test model naming -->
+    <!-- CS1718: Self-comparison (a <= a) — intentional in operator reflexivity tests -->
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CA1707;CA1816;CA1822;CA1852;CA1310;CA1305;CS0618;CS8625</NoWarn>
+    <NoWarn>$(NoWarn);CA1707;CA1711;CA1816;CA1822;CA1852;CA1310;CA1311;CA1304;CA1305;CA1847;CA1861;CA1862;CA1866;CA2249;CA2263;CS0618;CS1718;CS8625</NoWarn>
   </PropertyGroup>
 </Project>
