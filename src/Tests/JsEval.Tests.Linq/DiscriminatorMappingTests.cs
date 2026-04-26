@@ -293,4 +293,34 @@ public class DiscriminatorMappingTests
             Translate<Principal, bool>("(p) => Type.Is(p, 'person') && p.Email.endsWith('@example.com')", opts));
     }
 
+    // ── Optional chaining + narrowing ─────────────────────────────────────────
+
+    [Fact]
+    public void Is_AndNarrowing_OptionalChain_AccessesSubtypeProperty()
+    {
+        // `?.` must propagate the narrowing context set by Type.Is — before this fix
+        // VisitChainElement resolved against the base type and threw.
+        var expr = Translate<Animal, bool>("(a) => Type.Is(a, 'dog') && a.Breed?.startsWith('Lab')", Opts);
+        Assert.Contains("Convert(a, Dog).Breed", expr.ToString());
+        var fn = expr.Compile();
+        Assert.True (fn(new Dog { Breed = "Labrador" }));
+        Assert.False(fn(new Dog { Breed = "Poodle"   }));
+        Assert.False(fn(new Dog { Breed = null        }));
+        Assert.False(fn(new Cat()                      ));
+    }
+
+    [Fact]
+    public void CombinedMapping_AndNarrowing_OptionalChain_AccessesSubtypeProperty()
+    {
+        // Same fix path for combined (property-based) discriminator mappings.
+        var expr = Translate<Principal, bool>(
+            "(p) => Type.Is(p, 'person') && p.Email?.endsWith('@example.com')", CombinedOpts);
+        Assert.Contains("Convert(p, PersonView).Email", expr.ToString());
+        var fn = expr.Compile();
+        Assert.True (fn(new PersonView  { ParticipantType = "person",  Email = "alice@example.com" }));
+        Assert.False(fn(new PersonView  { ParticipantType = "person",  Email = "alice@other.com"   }));
+        Assert.False(fn(new PersonView  { ParticipantType = "person",  Email = null                }));
+        Assert.False(fn(new CompanyView { ParticipantType = "company", Email = "x@example.com"     }));
+    }
+
 }

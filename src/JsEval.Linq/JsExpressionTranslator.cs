@@ -378,9 +378,19 @@ public static class JsExpressionTranslator
                 var obj = VisitChainElement((AstExpr)me.Object, ctx, guards);
                 if (me.Optional) guards.Add(obj);
                 var propName = ResolveMemberName(me);
-                var prop = ReflectionCache.GetProperty(obj.Type, propName)
-                    ?? throw new InvalidOperationException($"Property '{propName}' not found on {obj.Type.Name}");
-                return LinqExpr.Property(obj, prop);
+                var prop = ReflectionCache.GetProperty(obj.Type, propName);
+                if (prop != null)
+                    return LinqExpr.Property(obj, prop);
+                if (obj is ParameterExpression chainParam)
+                {
+                    var narrowings = ctx.GetNarrowings(chainParam);
+                    if (narrowings != null)
+                    {
+                        var narrowed = TryResolveViaIntersection(chainParam, propName, narrowings);
+                        if (narrowed != null) return narrowed;
+                    }
+                }
+                throw new InvalidOperationException($"Property '{propName}' not found on {obj.Type.Name}");
             }
             case CallExpression ce:
             {

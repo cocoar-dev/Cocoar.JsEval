@@ -36,6 +36,8 @@ All notable changes to this project will be documented in this file.
 
 - **AND-narrowing for combined discriminator mappings.** `Type.Is(p, 'person') && p.Email.endsWith(...)` now resolves subtype-only properties correctly when using combined mappings (`AddDiscriminatorMappings<T>("PropName", ("person", typeof(PersonView)), …)`). Previously `CollectNarrowings` recognized only `TypeBinaryExpression` nodes — combined mappings emit `p.Prop == "value"` (`BinaryExpression{Equal}`), so no narrowing frame was ever pushed and the property lookup threw. `CollectNarrowings` now also recognizes the property-equality pattern and injects `ConcreteType` as the narrowing target. Property-only mappings (no `ConcreteType`) still throw — there is no subtype to narrow to.
 
+- **Optional chaining (`?.`) in AND-narrowing predicates.** `Type.Is(p, 'person') && p.Email?.endsWith(...)` now resolves subtype-only properties correctly. Previously `VisitChainElement` resolved member accesses strictly against `obj.Type` (the declared base type) and never consulted the active narrowing context, so any `?.` access to a subtype-only property threw `Property 'X' not found on BaseType`. `VisitChainElement` now mirrors the fallback in `VisitMember`: if the direct lookup fails and `obj` is a narrowed parameter, `TryResolveViaIntersection` is tried next. Workaround (`p.Email && p.Email.endsWith(...)`) is no longer needed.
+
 ## [3.2.0]
 
 ### Added
