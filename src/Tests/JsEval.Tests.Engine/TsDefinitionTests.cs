@@ -115,26 +115,69 @@ public class TsDefinitionTests
         Assert.Equal("Promise", result);
     }
 
-    // --- Collections stay as .NET types (NOT mapped to Array/Record) ---
+    // --- Collections → Array / ReadonlyArray / Record ---
 
-    [Fact]
-    public void ListOfString_IsNotMappedToArray()
+    [Theory]
+    [InlineData(typeof(List<string>))]
+    [InlineData(typeof(IList<string>))]
+    [InlineData(typeof(IEnumerable<string>))]
+    [InlineData(typeof(ICollection<string>))]
+    [InlineData(typeof(HashSet<string>))]
+    [InlineData(typeof(ISet<string>))]
+    public void ArrayLikeCollections_MapsToArrayBare(Type collectionType)
     {
         var defaults = new TypeScriptRendererDefaults();
-        var typeDef = TypeDefinition.FromType(typeof(List<string>));
+        var typeDef = TypeDefinition.FromType(collectionType);
         var result = defaults.NormalizeTypeName(typeDef, []);
 
-        Assert.DoesNotContain("Array", result);
+        Assert.Equal("Array", result);
+    }
+
+    [Theory]
+    [InlineData(typeof(IReadOnlyList<string>))]
+    [InlineData(typeof(IReadOnlyCollection<string>))]
+    public void ReadOnlyCollections_MapsToReadonlyArrayBare(Type collectionType)
+    {
+        var defaults = new TypeScriptRendererDefaults();
+        var typeDef = TypeDefinition.FromType(collectionType);
+        var result = defaults.NormalizeTypeName(typeDef, []);
+
+        Assert.Equal("ReadonlyArray", result);
+    }
+
+    [Theory]
+    [InlineData(typeof(Dictionary<string, string>))]
+    [InlineData(typeof(IDictionary<string, string>))]
+    [InlineData(typeof(IReadOnlyDictionary<string, string>))]
+    public void Dictionaries_MapsToRecordBare(Type dictionaryType)
+    {
+        var defaults = new TypeScriptRendererDefaults();
+        var typeDef = TypeDefinition.FromType(dictionaryType);
+        var result = defaults.NormalizeTypeName(typeDef, []);
+
+        Assert.Equal("Record", result);
     }
 
     [Fact]
-    public void DictionaryStringString_IsNotMappedToRecord()
+    public void Render_ListProperty_EmitsArrayGeneric()
     {
-        var defaults = new TypeScriptRendererDefaults();
-        var typeDef = TypeDefinition.FromType(typeof(Dictionary<string, string>));
-        var result = defaults.NormalizeTypeName(typeDef, []);
+        var builder = new DefinitionBuilder();
+        builder.AddTypes(typeof(SampleClass));
 
-        Assert.DoesNotContain("Record", result);
+        var rendered = string.Join("\n", builder.Render().Values);
+
+        Assert.Contains("Array<string>", rendered);
+    }
+
+    [Fact]
+    public void Render_DictionaryProperty_EmitsRecordGeneric()
+    {
+        var builder = new DefinitionBuilder();
+        builder.AddTypes(typeof(SampleClass));
+
+        var rendered = string.Join("\n", builder.Render().Values);
+
+        Assert.Contains("Record<string,", rendered);
     }
 
     // --- TsDefinitionService Integration Tests ---

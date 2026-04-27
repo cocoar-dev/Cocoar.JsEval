@@ -220,6 +220,11 @@ C# types are automatically mapped to TypeScript equivalents:
 | `Task<T>`, `ValueTask<T>` | `Promise<T>` |
 | `Task`, `ValueTask` | `Promise<void>` |
 | `byte[]` | `ArrayBuffer` |
+| `List<T>`, `IList<T>`, `IEnumerable<T>`, `ICollection<T>`, `HashSet<T>`, `ISet<T>` | `Array<T>` |
+| `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `ReadOnlyCollection<T>` | `ReadonlyArray<T>` |
+| `Dictionary<K,V>`, `IDictionary<K,V>`, `IReadOnlyDictionary<K,V>` | `Record<K, V>` |
+
+Collection types map to standard TypeScript array/dictionary types so Monaco knows about `.some()`, `.includes()`, `.filter()`, and index access — matching what Jint exposes at runtime.
 
 ## Caching
 

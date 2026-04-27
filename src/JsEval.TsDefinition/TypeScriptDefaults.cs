@@ -28,15 +28,31 @@ public class TypeScriptRendererDefaults
     };
 
     /// <summary>
-    /// Generic type mappings for types that are ACTUALLY converted at runtime.
-    /// Only Task/ValueTask → Promise (via TaskInterop).
-    /// Collections/Dictionaries are NOT mapped here — they stay as their .NET types
-    /// with full IntelliSense, because Jint exposes them as ObjectWrappers, not native JS types.
+    /// Generic wrapper name for generic types. The caller appends the type arguments.
+    /// Task/ValueTask → Promise (via TaskInterop).
+    /// Collections → Array / ReadonlyArray (Jint wraps all IEnumerable&lt;T&gt; as array-like objects;
+    ///   without this mapping Monaco shows .some()/.includes()/.filter() as errors).
+    /// Dictionaries → Record (accessible via bracket notation in JS).
     /// </summary>
     public Dictionary<Type, string> GenericTypeMappings { get; } = new()
     {
         [typeof(Task<>)] = "Promise",
         [typeof(ValueTask<>)] = "Promise",
+        // Array-like collections
+        [typeof(List<>)] = "Array",
+        [typeof(IList<>)] = "Array",
+        [typeof(IEnumerable<>)] = "Array",
+        [typeof(ICollection<>)] = "Array",
+        [typeof(Collection<>)] = "Array",
+        [typeof(HashSet<>)] = "Array",
+        [typeof(ISet<>)] = "Array",
+        [typeof(IReadOnlyList<>)] = "ReadonlyArray",
+        [typeof(IReadOnlyCollection<>)] = "ReadonlyArray",
+        [typeof(ReadOnlyCollection<>)] = "ReadonlyArray",
+        // Dictionary-like collections
+        [typeof(Dictionary<,>)] = "Record",
+        [typeof(IDictionary<,>)] = "Record",
+        [typeof(IReadOnlyDictionary<,>)] = "Record",
     };
 
     public string NormalizeTypeName(TypeDefinition typeDefinition, List<Type> allowedTypes, bool includeNamespace = true)

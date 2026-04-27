@@ -38,6 +38,8 @@ All notable changes to this project will be documented in this file.
 
 - **Optional chaining (`?.`) in AND-narrowing predicates.** `Type.Is(p, 'person') && p.Email?.endsWith(...)` now resolves subtype-only properties correctly. Previously `VisitChainElement` resolved member accesses strictly against `obj.Type` (the declared base type) and never consulted the active narrowing context, so any `?.` access to a subtype-only property threw `Property 'X' not found on BaseType`. `VisitChainElement` now mirrors the fallback in `VisitMember`: if the direct lookup fails and `obj` is a narrowed parameter, `TryResolveViaIntersection` is tried next. Workaround (`p.Email && p.Email.endsWith(...)`) is no longer needed.
 
+- **`DefinitionBuilder` maps `List<T>` and other collections to `Array<T>` in generated `.d.ts`.** Previously `List<T>`, `IEnumerable<T>`, `ICollection<T>`, `HashSet<T>`, etc. were emitted as `System.Collections.Generic.List$1<T>` — a type without `.some()`, `.includes()`, `.filter()` in Monaco, causing red underlines even though the script ran correctly at runtime. Now mapped: `List<T>` / `IList<T>` / `IEnumerable<T>` / `ICollection<T>` / `Collection<T>` / `HashSet<T>` / `ISet<T>` → `Array<T>`; `IReadOnlyList<T>` / `IReadOnlyCollection<T>` / `ReadOnlyCollection<T>` → `ReadonlyArray<T>`; `Dictionary<K,V>` / `IDictionary<K,V>` / `IReadOnlyDictionary<K,V>` → `Record<K,V>`.
+
 ## [3.2.0]
 
 ### Added

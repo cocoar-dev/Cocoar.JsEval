@@ -689,6 +689,10 @@ var expr = JsExpressionTranslator.Translate<Participant, bool>(jsFn, engine, opt
 // check, injects PersonView as the narrowing target, and emits the cast.
 (p) => Type.Is(p, 'person') && p.Email.endsWith('@example.com')
 // → p.ParticipantType == "person" && ((PersonView)p).Email.EndsWith("@example.com")
+
+// Optional chaining works too (v3.3.0+):
+(p) => Type.Is(p, 'person') && p.Email?.endsWith('@example.com')
+// → p.ParticipantType == "person" && ((PersonView)p).Email != null && ((PersonView)p).Email.EndsWith("@example.com")
 ```
 
 ### IntelliSense in Monaco
