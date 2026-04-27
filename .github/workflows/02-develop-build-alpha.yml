@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -83,7 +83,7 @@ jobs:
         working-directory: ./src
 
       - name: Upload artifacts for testing
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: prerelease-${{ steps.gv.outputs.SemVer }}
           path: artifacts

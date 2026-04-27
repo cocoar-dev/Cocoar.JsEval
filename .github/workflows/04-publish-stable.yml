@@ -51,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.release.tag_name }}
 
@@ -84,7 +84,7 @@ jobs:
 
     steps:
       - name: Checkout tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.release.tag_name }}
 
@@ -112,7 +112,7 @@ jobs:
           (( ${#files[@]} )) || { echo "::error ::No packages found in artifacts/"; exit 1; }
 
       - name: Upload artifacts (audit)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: packages-${{ needs.validate-version.outputs.version }}
           path: artifacts
@@ -136,7 +136,7 @@ jobs:
 
     steps:
       - name: Checkout tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.release.tag_name }}
 

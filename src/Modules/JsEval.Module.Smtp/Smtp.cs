@@ -125,7 +125,7 @@ public class MSmtpClient
 
 public class MSmtpClientOptions
 {
-    public string? SMTPServer { get; set; }
+    public string SMTPServer { get; set; } = "";
     public int SMTPServerPort { get; set; } = 25;
 
     public bool UseSSL { get; set; } = true;

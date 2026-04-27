@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
@@ -58,7 +58,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
@@ -132,7 +132,7 @@ jobs:
           (( ${#files[@]} )) || { echo "::error ::No packages found in artifacts/"; exit 1; }
 
       - name: Upload artifacts (audit)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: prerelease-packages-${{ env.PACKAGE_VERSION }}
           path: ${{ github.workspace }}/artifacts
