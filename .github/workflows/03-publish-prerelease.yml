@@ -132,7 +132,7 @@ jobs:
           (( ${#files[@]} )) || { echo "::error ::No packages found in artifacts/"; exit 1; }
 
       - name: Upload artifacts (audit)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: prerelease-packages-${{ env.PACKAGE_VERSION }}
           path: ${{ github.workspace }}/artifacts

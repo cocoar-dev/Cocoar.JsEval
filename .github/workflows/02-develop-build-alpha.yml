@@ -83,7 +83,7 @@ jobs:
         working-directory: ./src
 
       - name: Upload artifacts for testing
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: prerelease-${{ steps.gv.outputs.SemVer }}
           path: artifacts
