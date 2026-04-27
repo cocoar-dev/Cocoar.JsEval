@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file. For the authoritative source, see [`CHANGELOG.md`](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/CHANGELOG.md) in the repo root.
 
-## [3.3.0-beta]
+## [3.3.0]
 
 ### Added
 - **`Type.IsOneOf(value, ['a','b',…])`** — shorthand for multiple OR'd `Type.Is` calls. Expands to an `OrElse` chain in LINQ. Monaco narrows to the correct union type via a conditional-type overload in the generated `.d.ts`.
@@ -22,7 +22,7 @@ All notable changes to this project are documented in this file. For the authori
 - **Optional chaining (`?.`) in AND-narrowing predicates.** `Type.Is(p, 'person') && p.Email?.endsWith(...)` now resolves subtype-only properties correctly. `VisitChainElement` now mirrors the fallback in `VisitMember`. Workaround (`p.Email && p.Email.endsWith(...)`) no longer needed.
 - **`DefinitionBuilder` maps collections to TypeScript array types.** `List<T>`, `IEnumerable<T>`, etc. are now `Array<T>` in the generated `.d.ts` — no more `System.Collections.Generic.List$1<T>`. `.some()`, `.includes()`, `.filter()` no longer show as Monaco errors. `IReadOnlyList<T>` / `IReadOnlyCollection<T>` → `ReadonlyArray<T>`; `Dictionary<K,V>` / `IDictionary<K,V>` → `Record<K,V>`.
 
-## [3.2.0-beta]
+## [3.2.0]
 
 ### Added
 - **`Type.IsOneOf(value, ['a','b'])`** — shorthand for multiple OR'd `Type.Is` calls. Expands to an `OrElse` chain in LINQ. Monaco narrows to the correct union type via a conditional-type overload in the generated `.d.ts`.
