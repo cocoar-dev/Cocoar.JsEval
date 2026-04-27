@@ -7,7 +7,7 @@ namespace Cocoar.JsEval.Linq;
 /// </summary>
 public static class JsLinqContext
 {
-    private static readonly AsyncLocal<State> _state = new();
+    private static readonly AsyncLocal<State?> _state = new();
 
     /// <summary>
     /// The Jint engine of the current <see cref="Scope"/> (if any) — used by the

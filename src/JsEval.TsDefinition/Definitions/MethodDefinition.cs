@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -22,10 +23,10 @@ public class MethodDefinition : IDefinition
     public override string ToString()
     {
         var strb = new StringBuilder();
-        strb.Append($"{AccessModifier} {ReturnType} {Name}");
+        strb.Append(CultureInfo.InvariantCulture, $"{AccessModifier} {ReturnType} {Name}");
         if (GenericArguments.Count > 0)
-            strb.Append($"<{string.Join(", ", GenericArguments)}>");
-        strb.Append($"({string.Join(", ", Parameters)})");
+            strb.Append(CultureInfo.InvariantCulture, $"<{string.Join(", ", GenericArguments)}>");
+        strb.Append(CultureInfo.InvariantCulture, $"({string.Join(", ", Parameters)})");
         return strb.ToString();
     }
 

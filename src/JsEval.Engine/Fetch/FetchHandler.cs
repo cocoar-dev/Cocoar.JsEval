@@ -12,7 +12,7 @@ namespace Cocoar.JsEval.Engine.Fetch;
 /// Implements the browser-compatible fetch() global function.
 /// Usage in scripts: const response = await fetch(url, options?)
 /// </summary>
-internal class FetchHandler
+internal sealed class FetchHandler
 {
     private static readonly HttpClient DefaultClient = new()
     {

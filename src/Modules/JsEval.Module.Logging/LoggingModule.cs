@@ -1,8 +1,12 @@
 using Cocoar.JsEval;
 using Microsoft.Extensions.Logging;
 
+#pragma warning disable CA1716 // 'Module' in namespace conflicts with keyword — cannot rename without a breaking change
 namespace Cocoar.JsEval.Module.Logging;
+#pragma warning restore CA1716
 
+#pragma warning disable CA1848 // LoggerMessage delegates not required for JS-facing module logging
+#pragma warning disable CA2254 // Message template varies by design — JS scripts provide dynamic log messages
 public class LoggingModule(ILogger<LoggingModule> logger) : IJsModule
 {
     private readonly ILogger _logger = logger;
@@ -77,3 +81,5 @@ public class LoggingModule(ILogger<LoggingModule> logger) : IJsModule
         Log(LogLevel.Warning, message, args);
     }
 }
+#pragma warning restore CA2254
+#pragma warning restore CA1848

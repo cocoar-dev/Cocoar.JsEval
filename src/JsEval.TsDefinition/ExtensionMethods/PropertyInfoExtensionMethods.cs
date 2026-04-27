@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -10,10 +11,10 @@ public static class PropertyInfoExtensionMethods
     {
         var mName = propertyInfo.DeclaringType?.GetCustomAttribute<DefaultMemberAttribute>()?.MemberName ?? "Item";
 
-        return propertyInfo.GetMethod?.Name.Equals($"get_{mName}") == true ||
-               propertyInfo.SetMethod?.Name.Equals($"set_{mName}") == true ||
-               propertyInfo.GetMethod?.Name.EndsWith($".get_{mName}") == true ||
-               propertyInfo.SetMethod?.Name.EndsWith($".set_{mName}") == true;
+        return propertyInfo.GetMethod?.Name.Equals($"get_{mName}", StringComparison.Ordinal) == true ||
+               propertyInfo.SetMethod?.Name.Equals($"set_{mName}", StringComparison.Ordinal) == true ||
+               propertyInfo.GetMethod?.Name.EndsWith($".get_{mName}", StringComparison.Ordinal) == true ||
+               propertyInfo.SetMethod?.Name.EndsWith($".set_{mName}", StringComparison.Ordinal) == true;
     }
 
     public static IEnumerable<PropertyInfo> WhichIsIndexerProperty(this IEnumerable<PropertyInfo> propertyInfos) =>

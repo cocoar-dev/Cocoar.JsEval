@@ -33,7 +33,7 @@ public sealed class JsModuleRegistry : IJsModuleRegistry
 
         var moduleDefinition = new JsModuleDefinition(name, moduleType)
         {
-            Tags = moduleAttribute?.Tags?.Select(t => t.ToLower()).ToList() ?? []
+            Tags = moduleAttribute?.Tags?.Select(t => t.ToLowerInvariant()).ToList() ?? []
         };
 
         RegisteredModules.TryAdd(name, moduleDefinition);
@@ -54,7 +54,7 @@ public sealed class JsModuleRegistry : IJsModuleRegistry
         {
             if (module.Tags?.Any() == true)
             {
-                var hasAllowedTag = useTaggedModules.Any(tm => module.Tags.Contains(tm.ToLower()));
+                var hasAllowedTag = useTaggedModules.Any(tm => module.Tags.Contains(tm.ToLowerInvariant()));
                 if (!hasAllowedTag)
                 {
                     throw new InvalidOperationException($"Module '{name}' is not available in this scripting context.");
@@ -113,7 +113,7 @@ public sealed class JsModuleRegistry : IJsModuleRegistry
 
     private static string TrimEnd(string value, string trim)
     {
-        if (value.EndsWith(trim))
+        if (value.EndsWith(trim, StringComparison.Ordinal))
         {
             value = value[..^trim.Length];
         }

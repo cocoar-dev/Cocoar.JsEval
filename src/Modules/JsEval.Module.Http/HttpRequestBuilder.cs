@@ -12,7 +12,9 @@ using DynamicExpresso;
 using Microsoft.Extensions.Primitives;
 using Nito.AsyncEx.Synchronous;
 
+#pragma warning disable CA1716 // Module in namespace -- cannot rename without breaking change
 namespace Cocoar.JsEval.Module.Http;
+#pragma warning restore CA1716
 
 public class HttpRequestBuilder : IHttpRequestBuilder
 {
@@ -46,7 +48,7 @@ public class HttpRequestBuilder : IHttpRequestBuilder
         if (string.IsNullOrWhiteSpace(key))
             return this;
 
-        key = key.ToLower();
+        key = key.ToLowerInvariant();
 
         _requestData.Headers.AddOrUpdate(key,
             _ => value.ToList(),
@@ -105,7 +107,7 @@ public class HttpRequestBuilder : IHttpRequestBuilder
         if (string.IsNullOrWhiteSpace(key))
             return this;
 
-        key = key.ToLower();
+        key = key.ToLowerInvariant();
         _requestData.Headers.TryRemove(key, out _);
         _requestData.Headers.TryAdd(key, value.ToList());
 
@@ -123,7 +125,7 @@ public class HttpRequestBuilder : IHttpRequestBuilder
         if (string.IsNullOrWhiteSpace(key))
             return this;
 
-        key = key.ToLower();
+        key = key.ToLowerInvariant();
 
         _requestData.QueryParameters.AddOrUpdate(key, s =>
         {
@@ -173,7 +175,7 @@ public class HttpRequestBuilder : IHttpRequestBuilder
         if (string.IsNullOrWhiteSpace(key))
             return this;
 
-        key = key.ToLower();
+        key = key.ToLowerInvariant();
 
         _requestData.QueryParameters.TryRemove(key, out _);
         _requestData.QueryParameters.TryAdd(key, new StringValues(value));
@@ -221,7 +223,7 @@ public class HttpRequestBuilder : IHttpRequestBuilder
             responseMessage = await cl.SendAsync(httpRequestMessage, this._httpHandlerOptions.HttpCompletionOption);
             foreach (var httpRetryPolicy in Retries.Where(p => p.Delay.Count > 0))
             {
-                var expr = RetryHelper.ParseInput(httpRetryPolicy.Expression, $"{(int)responseMessage.StatusCode}");
+                var expr = RetryHelper.ParseInput(httpRetryPolicy.Expression, ((int)responseMessage.StatusCode).ToString(System.Globalization.CultureInfo.InvariantCulture));
                 var matches = RetryHelper.EvalExpression(expr);
                 if (matches)
                 {
@@ -353,7 +355,7 @@ public static class RetryHelper
 
         //check not(expr)
         var isNegated = false;
-        if (expr.StartsWith("not(") && expr.EndsWith(")"))
+        if (expr.StartsWith("not(", StringComparison.Ordinal) && expr.EndsWith(')'))
         {
             expr = expr[4..^1];
             isNegated = true;
@@ -420,7 +422,7 @@ public static class RetryHelper
 
         try
         {
-            return (bool)Convert.ChangeType(result, typeof(bool));
+            return (bool)Convert.ChangeType(result, typeof(bool), System.Globalization.CultureInfo.InvariantCulture);
         }
         catch (Exception exception)
         {

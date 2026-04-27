@@ -115,7 +115,9 @@ public sealed class JsEvalBuilder
     public JsEvalBuilder AddTypeAlias<T>(string alias) => AddTypeAlias(typeof(T), alias);
 
     /// <inheritdoc cref="AddTypeAlias{T}(string)"/>
+#pragma warning disable CA2263 // Generic overload preferred — this is the Type-based implementation entry point
     public JsEvalBuilder AddTypeAlias<T>() => AddTypeAlias(typeof(T), typeof(T).Name);
+#pragma warning restore CA2263
 
     /// <inheritdoc cref="AddTypeAlias{T}(string)"/>
     public JsEvalBuilder AddTypeAlias(Type type, string alias)
@@ -138,7 +140,7 @@ public sealed class JsEvalBuilder
     /// <summary>
     /// Registers discriminator mappings for a polymorphic base type where all values
     /// share a common string property as the discriminator field (Marten, flat documents).
-    /// LINQ generates <c>p.PropertyName == value</c>; Monaco narrows to <paramref name="concreteType"/>.
+    /// LINQ generates <c>p.PropertyName == value</c>; Monaco narrows to the concrete type.
     /// <code>
     /// .AddDiscriminatorMappings&lt;Participant&gt;("ParticipantType",
     ///     ("person",  typeof(PersonView)),

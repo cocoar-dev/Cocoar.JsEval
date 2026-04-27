@@ -20,6 +20,8 @@ namespace Cocoar.JsEval.Linq;
 /// which is inherent to JS's IEEE-754 number type).
 /// </para>
 /// </summary>
+#pragma warning disable CA1720 // Identifier contains type name — JS-facing method names on a JS global object
+#pragma warning disable CA1822 // Instance methods required by Jint ObjectWrapper + LinqTsContributor reflection
 public sealed class LinqGlobal
 {
     /// <summary>Parse as <see cref="decimal"/>. Precision preserved at translation time.</summary>
@@ -67,3 +69,5 @@ public sealed class LinqGlobal
     /// <summary>Capture today's UTC date at the moment of evaluation.</summary>
     public DateTime todayUtc() => DateTime.UtcNow.Date;
 }
+#pragma warning restore CA1822
+#pragma warning restore CA1720

@@ -4,7 +4,9 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography.X509Certificates;
 
+#pragma warning disable CA1716 // Module in namespace -- cannot rename without breaking change
 namespace Cocoar.JsEval.Module.Http;
+#pragma warning restore CA1716
 
 public class HttpHandlerOptions(Uri uri)
 {

@@ -14,7 +14,7 @@ namespace Cocoar.JsEval.TypeScript;
 /// <summary>
 /// Transpiles TypeScript source code to JavaScript (ESNext target).
 /// Use this to compile TypeScript once (e.g., at save time), then execute
-/// the resulting JavaScript with <see cref="Cocoar.JsEval.Engine.JsEngine"/>.
+/// the resulting JavaScript with a <c>JsEngine</c> instance.
 ///
 /// <para><b>Error handling (since 3.1.2).</b> Throws <see cref="TsTranspileException"/>
 /// on any syntax error reported by the TypeScript compiler. Non-error diagnostics
@@ -41,6 +41,10 @@ public sealed class TsTranspiler
     /// reports any error. Non-error diagnostics are dropped; use
     /// <see cref="TranspileWithSourceMap"/> if you need them.
     /// </summary>
+    // CA1822: kept as instance methods — public API; callers hold TsTranspiler instances
+    // (e.g., pooling wrappers and existing test code). Making them static is a source-breaking
+    // change because C# does not allow calling static members through instance references.
+#pragma warning disable CA1822
     public string Transpile(string sourceCode)
     {
         if (string.IsNullOrWhiteSpace(sourceCode))
@@ -64,6 +68,7 @@ public sealed class TsTranspiler
         var (js, map, warnings) = TranspileCore(sourceCode, emitSourceMap: true);
         return new TsTranspileResult(js, map ?? "", warnings);
     }
+#pragma warning restore CA1822
 
     private static (string Js, string? SourceMap, IReadOnlyList<TsDiagnostic> Warnings) TranspileCore(
         string sourceCode, bool emitSourceMap)
@@ -131,7 +136,7 @@ public sealed class TsTranspiler
         }
     }
 
-    private static IReadOnlyList<TsDiagnostic> ExtractDiagnostics(JsValue diagnosticsValue, string sourceText)
+    private static List<TsDiagnostic> ExtractDiagnostics(JsValue diagnosticsValue, string sourceText)
     {
         if (!diagnosticsValue.IsArray())
             return [];

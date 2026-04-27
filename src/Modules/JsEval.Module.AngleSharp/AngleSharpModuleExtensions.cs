@@ -1,7 +1,10 @@
+using System;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 
+#pragma warning disable CA1716 // 'Module' in namespace conflicts with keyword — cannot rename without a breaking change
 namespace Cocoar.JsEval.Module.AngleSharp;
+#pragma warning restore CA1716
 
 public static class AngleSharpModuleExtensions
 {
@@ -10,7 +13,9 @@ public static class AngleSharpModuleExtensions
         if (htmlDocument.Head is null)
             return htmlDocument;
 
+#pragma warning disable CA1826 // FirstOrDefault is used intentionally for null-safety over direct index access
         var baseHrefElement = htmlDocument.Head.GetElementsByTagName("base").FirstOrDefault();
+#pragma warning restore CA1826
         if (baseHrefElement is not null)
         {
             baseHrefElement.SetAttribute("href", href);
@@ -38,7 +43,7 @@ public static class AngleSharpModuleExtensions
     {
         if (htmlDocument.Head is null)
             return null;
-        return htmlDocument.Head.GetElementsByTagName("meta").FirstOrDefault(m => m.GetAttribute("http-equiv") == "Content-Security-Policy")?.GetAttribute("content");
+        return htmlDocument.Head.GetElementsByTagName("meta").FirstOrDefault(m => string.Equals(m.GetAttribute("http-equiv"), "Content-Security-Policy", StringComparison.Ordinal))?.GetAttribute("content");
     }
 
     public static IHtmlDocument SetContentSecurityPolicy(this IHtmlDocument htmlDocument, string content)
@@ -46,7 +51,7 @@ public static class AngleSharpModuleExtensions
         if (htmlDocument.Head is null)
             return htmlDocument;
 
-        htmlDocument.Head.GetElementsByTagName("meta").FirstOrDefault(m => m.GetAttribute("http-equiv") == "Content-Security-Policy")?.SetAttribute("content", content);
+        htmlDocument.Head.GetElementsByTagName("meta").FirstOrDefault(m => string.Equals(m.GetAttribute("http-equiv"), "Content-Security-Policy", StringComparison.Ordinal))?.SetAttribute("content", content);
 
         return htmlDocument;
     }
@@ -55,9 +60,9 @@ public static class AngleSharpModuleExtensions
     {
         if (htmlDocument.Head is null)
             return htmlDocument;
-        var content = htmlDocument.Head.GetElementsByTagName("meta").FirstOrDefault(m => m.GetAttribute("http-equiv") == "Content-Security-Policy")?.GetAttribute("content") ?? "";
-        content = content.Replace(from, to);
-        htmlDocument.Head.GetElementsByTagName("meta").FirstOrDefault(m => m.GetAttribute("http-equiv") == "Content-Security-Policy")?.SetAttribute("content", content);
+        var content = htmlDocument.Head.GetElementsByTagName("meta").FirstOrDefault(m => string.Equals(m.GetAttribute("http-equiv"), "Content-Security-Policy", StringComparison.Ordinal))?.GetAttribute("content") ?? "";
+        content = content.Replace(from, to, StringComparison.Ordinal);
+        htmlDocument.Head.GetElementsByTagName("meta").FirstOrDefault(m => string.Equals(m.GetAttribute("http-equiv"), "Content-Security-Policy", StringComparison.Ordinal))?.SetAttribute("content", content);
         return htmlDocument;
     }
 

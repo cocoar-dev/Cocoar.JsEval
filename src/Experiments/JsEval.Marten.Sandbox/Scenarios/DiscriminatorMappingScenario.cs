@@ -13,8 +13,9 @@ public static class DiscriminatorMappingScenario
 {
     private static readonly List<DiscriminatorMapping> Mappings =
     [
-        new(typeof(Participant), "person",  typeof(PersonView),  "ParticipantType"),
-        new(typeof(Participant), "company", typeof(CompanyView), "ParticipantType"),
+        new(typeof(Participant), "person",          typeof(PersonView),          "ParticipantType"),
+        new(typeof(Participant), "company",         typeof(CompanyView),         "ParticipantType"),
+        new(typeof(Participant), "service-account", typeof(ServiceAccountView),  "ParticipantType"),
     ];
 
     private static readonly TranslationOptions TranslationOpts = new()
@@ -27,11 +28,12 @@ public static class DiscriminatorMappingScenario
         await using var session = store.LightweightSession();
         session.DeleteWhere<Participant>(_ => true);
         session.Store(
-            new Participant { Id = Guid.NewGuid(), Name = "Alice Müller",  ParticipantType = "person",  Firstname = "Alice", Lastname = "Müller"  },
-            new Participant { Id = Guid.NewGuid(), Name = "Bob Huber",     ParticipantType = "person",  Firstname = "Bob",   Lastname = "Huber"   },
-            new Participant { Id = Guid.NewGuid(), Name = "Anna Schmidt",  ParticipantType = "person",  Firstname = "Anna",  Lastname = "Schmidt" },
-            new Participant { Id = Guid.NewGuid(), Name = "Acme Corp",     ParticipantType = "company", VatNumber = "ATU1234" },
-            new Participant { Id = Guid.NewGuid(), Name = "Widgets GmbH",  ParticipantType = "company", VatNumber = "ATU5678" }
+            new Participant { Id = Guid.NewGuid(), Name = "Alice Müller",  ParticipantType = "person",         Firstname = "Alice", Lastname = "Müller",  Email = "alice@example.com"         },
+            new Participant { Id = Guid.NewGuid(), Name = "Bob Huber",     ParticipantType = "person",         Firstname = "Bob",   Lastname = "Huber",   Email = "bob@other.com"             },
+            new Participant { Id = Guid.NewGuid(), Name = "Anna Schmidt",  ParticipantType = "person",         Firstname = "Anna",  Lastname = "Schmidt", Email = "anna@example.com"          },
+            new Participant { Id = Guid.NewGuid(), Name = "Acme Corp",     ParticipantType = "company",        VatNumber = "ATU1234",                     Email = "info@acme.example.com"     },
+            new Participant { Id = Guid.NewGuid(), Name = "Widgets GmbH",  ParticipantType = "company",        VatNumber = "ATU5678",                     Email = "office@widgets.other.com"  },
+            new Participant { Id = Guid.NewGuid(), Name = "deploy-bot",    ParticipantType = "service-account"                                                                                }
         );
         await session.SaveChangesAsync();
         Console.WriteLine("Seeded 5 participants (property-based discrimination).");
@@ -90,5 +92,27 @@ public static class DiscriminatorMappingScenario
         SandboxStore.PrintSql(session.Query<Participant>().Where(exprOneOfAnd));
         var filteredOneOf = session.Query<Participant>().Where(exprOneOfAnd).ToList();
         Console.WriteLine($"  Rows ({filteredOneOf.Count}): {string.Join(", ", filteredOneOf.Select(p => p.Name))}");
+
+        // ── 6. OR + AND intersection narrowing ───────────────────────────────
+        // Person AND Company both have Email (on PersonView/CompanyView); ServiceAccount doesn't.
+        // Email is NOT on the base Participant C# class used for the combined-mapping views,
+        // but IS physically in the JSONB document (stored via Participant.Email).
+        // The translator emits Convert(p, PersonView).Email — does Marten follow the cast?
+        Console.WriteLine("\nOR + AND intersection narrowing (Email on person+company view types, not on service-account):");
+        try
+        {
+            var jsFnIntersect = engine.Evaluate(
+                "(p) => (Type.Is(p, 'person') || Type.Is(p, 'company')) && p.Email.endsWith('@example.com')");
+            var exprIntersect = JsExpressionTranslator.Translate<Participant, bool>(jsFnIntersect, engine, TranslationOpts);
+            Console.WriteLine($"  Expression : {exprIntersect}");
+            SandboxStore.PrintSql(session.Query<Participant>().Where(exprIntersect));
+            var intersected = session.Query<Participant>().Where(exprIntersect).ToList();
+            Console.WriteLine($"  Rows ({intersected.Count}): {string.Join(", ", intersected.Select(p => p.Name))}");
+            Console.WriteLine($"  service-account in result: {intersected.Any(p => p.ParticipantType == "service-account")} (expected: false)");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  ✗ {ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
+        }
     }
 }

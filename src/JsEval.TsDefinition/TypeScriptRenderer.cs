@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -39,10 +40,10 @@ public class TypeScriptRenderer
         var indentString = GetIndentString(indent);
         var comments = new StringBuilder();
         comments.AppendLine();
-        comments.AppendLine($"{indentString}/**");
+        comments.AppendLine(CultureInfo.InvariantCulture, $"{indentString}/**");
         foreach (var s in linesList)
-            comments.AppendLine($"{indentString}* {s}");
-        comments.AppendLine($"{indentString}*/");
+            comments.AppendLine(CultureInfo.InvariantCulture, $"{indentString}* {s}");
+        comments.AppendLine(CultureInfo.InvariantCulture, $"{indentString}*/");
         return comments.ToString();
     }
 
@@ -72,7 +73,7 @@ public class TypeScriptRenderer
         {
             var paramName = Defaults.NormalizeIdentifier(parameter.Name);
             var buildType = BuildTypeString(parameter.Type);
-            if (parameter.Type.IsArray && !buildType.EndsWith("[]"))
+            if (parameter.Type.IsArray && !buildType.EndsWith("[]", StringComparison.Ordinal))
                 buildType += "[]";
 
             var optional = parameter.IsOptional ? "?" : null;
@@ -124,18 +125,18 @@ public class TypeScriptRenderer
         var commentLines = new List<string>();
 
         var returnType = BuildTypeString(methodDefinition.ReturnType);
-        if (methodDefinition.ReturnType.IsArray && !returnType.EndsWith("[]"))
+        if (methodDefinition.ReturnType.IsArray && !returnType.EndsWith("[]", StringComparison.Ordinal))
             returnType += "[]";
 
         var otherReturnType = GetTypeString(methodDefinition.ReturnType);
-        if (methodDefinition.ReturnType.IsArray && !otherReturnType.EndsWith("[]"))
+        if (methodDefinition.ReturnType.IsArray && !otherReturnType.EndsWith("[]", StringComparison.Ordinal))
             otherReturnType += "[]";
 
         foreach (var param in methodDefinition.Parameters)
         {
             var paramName = Defaults.NormalizeIdentifier(param.Name);
             var buildType = BuildTypeString(param.Type);
-            if (param.Type.IsArray && !buildType.EndsWith("[]"))
+            if (param.Type.IsArray && !buildType.EndsWith("[]", StringComparison.Ordinal))
                 buildType += "[]";
 
             var optional = param.IsOptional ? "?" : null;
@@ -174,7 +175,7 @@ public class TypeScriptRenderer
         };
 
         var indentString = GetIndentString(indent);
-        strb.Append($"{indentString}{kind} {BuildTypeDefinitionTypeString(typeDefinition)}");
+        strb.Append(CultureInfo.InvariantCulture, $"{indentString}{kind} {BuildTypeDefinitionTypeString(typeDefinition)}");
 
         var extends = "";
         if (typeDefinition.BaseType is { RawType: not null })
@@ -220,7 +221,7 @@ public class TypeScriptRenderer
         strb.AppendLine(RenderBody(typeDefinition, indent + 4));
         strb.AppendLine(RenderBody(missingDefinitions, indent + 4));
 
-        strb.AppendLine($"{indentString}}}");
+        strb.AppendLine(CultureInfo.InvariantCulture, $"{indentString}}}");
         return strb.ToString();
     }
 
@@ -322,19 +323,19 @@ public class TypeScriptRenderer
         if (typeDefinition.TryGetPayload<NormalizedNonGenericTypeName>(out var normalized))
             return includeNamespace ? $"{normalized!.Namespace}.{normalized.TypeName}" : normalized!.TypeName;
 
-        if (typeDefinition.FriendlyName == "System.Action" || typeDefinition.FriendlyName?.StartsWith("System.Action<") == true)
+        if (typeDefinition.FriendlyName == "System.Action" || typeDefinition.FriendlyName?.StartsWith("System.Action<", StringComparison.Ordinal) == true)
         {
             var args = typeDefinition.GenericArguments.Select(s => BuildTypeString(s)).ToList();
             return TypeCache.BuildActionTypeName(typeDefinition.RawType!, args);
         }
 
-        if (typeDefinition.FriendlyName?.StartsWith("System.Func<") == true)
+        if (typeDefinition.FriendlyName?.StartsWith("System.Func<", StringComparison.Ordinal) == true)
         {
             var args = typeDefinition.GenericArguments.Select(s => BuildTypeString(s)).ToList();
             return TypeCache.BuildFuncTypeName(typeDefinition.RawType!, args);
         }
 
-        if (typeDefinition.FriendlyName?.StartsWith("System.Predicate<") == true)
+        if (typeDefinition.FriendlyName?.StartsWith("System.Predicate<", StringComparison.Ordinal) == true)
         {
             var args = typeDefinition.GenericArguments.Select(s => BuildTypeString(s)).ToList();
             return TypeCache.BuildPredicateTypeName(typeDefinition.RawType!, args);
@@ -347,7 +348,7 @@ public class TypeScriptRenderer
 
         if (name is not "any" and not "any[]" && typeDefinition.GenericArguments.Count > 0)
         {
-            if (name.EndsWith("[]"))
+            if (name.EndsWith("[]", StringComparison.Ordinal))
                 name = name[..^2];
 
             name += $"<{string.Join(", ", typeDefinition.GenericArguments.Select(s => BuildTypeString(s)))}>";
@@ -386,7 +387,7 @@ public class TypeScriptRenderer
 
         if (typeDefinition.GenericArguments.Count > 0)
         {
-            if (name.EndsWith("[]"))
+            if (name.EndsWith("[]", StringComparison.Ordinal))
                 name = name[..^2];
 
             name += $"<{string.Join(", ", typeDefinition.GenericArguments.Select(s => GetTypeString(s)))}>";
@@ -415,20 +416,20 @@ public class TypeScriptRenderer
         if (typeDefinition.TryGetPayload<NormalizedNonGenericTypeName>(out var normalized))
             return normalized!.TypeName;
 
-        if (typeDefinition.FriendlyName == "System.Action" || typeDefinition.FriendlyName?.StartsWith("System.Action<") == true)
+        if (typeDefinition.FriendlyName == "System.Action" || typeDefinition.FriendlyName?.StartsWith("System.Action<", StringComparison.Ordinal) == true)
             return TypeCache.BuildActionTypeName(typeDefinition.RawType!, typeDefinition.GenericArguments.Select(s => BuildTypeString(s)).ToList());
 
-        if (typeDefinition.FriendlyName?.StartsWith("System.Func<") == true)
+        if (typeDefinition.FriendlyName?.StartsWith("System.Func<", StringComparison.Ordinal) == true)
             return TypeCache.BuildFuncTypeName(typeDefinition.RawType!, typeDefinition.GenericArguments.Select(s => BuildTypeString(s)).ToList());
 
-        if (typeDefinition.FriendlyName?.StartsWith("System.Predicate<") == true)
+        if (typeDefinition.FriendlyName?.StartsWith("System.Predicate<", StringComparison.Ordinal) == true)
             return TypeCache.BuildPredicateTypeName(typeDefinition.RawType!, typeDefinition.GenericArguments.Select(s => BuildTypeString(s)).ToList());
 
         var name = Defaults.NormalizeTypeName(typeDefinition, AllowedTypes, false);
 
         if (name is not "any" and not "any[]" && typeDefinition.GenericArguments.Count > 0)
         {
-            if (name.EndsWith("[]"))
+            if (name.EndsWith("[]", StringComparison.Ordinal))
                 name = name[..^2];
 
             name += $"<{string.Join(", ", typeDefinition.GenericArguments.Select(s => BuildTypeString(s)))}>";
@@ -443,9 +444,9 @@ public class TypeScriptRenderer
     private NormalizedNonGenericTypeName? GetNormalizedNonGenericTypeName(TypeDefinition typeDefinition)
     {
         if (typeDefinition.FriendlyName == "System.Action" ||
-            typeDefinition.FriendlyName?.StartsWith("System.Action<") == true ||
-            typeDefinition.FriendlyName?.StartsWith("System.Func<") == true ||
-            typeDefinition.FriendlyName?.StartsWith("System.Predicate<") == true)
+            typeDefinition.FriendlyName?.StartsWith("System.Action<", StringComparison.Ordinal) == true ||
+            typeDefinition.FriendlyName?.StartsWith("System.Func<", StringComparison.Ordinal) == true ||
+            typeDefinition.FriendlyName?.StartsWith("System.Predicate<", StringComparison.Ordinal) == true)
             return null;
 
         if (typeDefinition.GenericArguments.All(s => s.IsGeneric))
@@ -455,7 +456,7 @@ public class TypeScriptRenderer
 
         if (name is not "any" and not "any[]" && typeDefinition.GenericArguments.Count > 0)
         {
-            if (name.EndsWith("[]"))
+            if (name.EndsWith("[]", StringComparison.Ordinal))
                 name = name[..^2];
 
             var genArgs = typeDefinition.GenericArguments.ToList();
@@ -608,7 +609,7 @@ public class TypeScriptRenderer
             // Render at indent 0, prefix each declaration with `declare` to make
             // it an ambient module-scope declaration usable from any .ts file.
             var rendered = Render(tdesc, indent: 0);
-            strb.AppendLine($"declare {rendered.TrimStart()}");
+            strb.AppendLine(CultureInfo.InvariantCulture, $"declare {rendered.TrimStart()}");
         }
         if (_discriminatorMappingsByBase.Count > 0)
             strb.AppendLine(RenderTypeConstDeclaration());
@@ -643,12 +644,12 @@ public class TypeScriptRenderer
             var union = string.Join(" | ", mappings.Select(m => $"'{m.Value}'"));
             var mapTypeName = $"{baseType.Name}ByDiscriminator";
 
-            sb.Append($"type {mapTypeName}<D extends {union}> =");
+            sb.Append(CultureInfo.InvariantCulture, $"type {mapTypeName}<D extends {union}> =");
             foreach (var (value, concreteType) in mappings)
             {
                 var concreteDef = TypeDefinition.FromType(concreteType, AllowedTypes);
                 sb.AppendLine();
-                sb.Append($"    D extends '{value}' ? {BuildTypeString(concreteDef)} :");
+                sb.Append(CultureInfo.InvariantCulture, $"    D extends '{value}' ? {BuildTypeString(concreteDef)} :");
             }
             sb.AppendLine();
             sb.AppendLine("    never;");
@@ -666,9 +667,9 @@ public class TypeScriptRenderer
             foreach (var (value, concreteType) in mappings)
             {
                 var concreteDef = TypeDefinition.FromType(concreteType, AllowedTypes);
-                sb.AppendLine($"    Is(value: {baseTypeName}, d: '{value}'): value is {BuildTypeString(concreteDef)};");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"    Is(value: {baseTypeName}, d: '{value}'): value is {BuildTypeString(concreteDef)};");
             }
-            sb.AppendLine($"    IsOneOf<D extends {union}>(value: {baseTypeName}, ds: readonly D[]): value is {mapTypeName}<D>;");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"    IsOneOf<D extends {union}>(value: {baseTypeName}, ds: readonly D[]): value is {mapTypeName}<D>;");
         }
         sb.AppendLine("    Is(value: object, d: string): boolean;");
         sb.AppendLine("    IsOneOf(value: object, ds: string[]): boolean;");
@@ -692,7 +693,7 @@ public class TypeScriptRenderer
         if (indent == 0)
             strbuilder.Append("declare ");
 
-        strbuilder.AppendLine($"{indentString}namespace {namespaceDefinition.Name} {{");
+        strbuilder.AppendLine(CultureInfo.InvariantCulture, $"{indentString}namespace {namespaceDefinition.Name} {{");
         indent += 4;
 
         strbuilder.AppendLine();
@@ -706,14 +707,14 @@ public class TypeScriptRenderer
         foreach (var ns in namespaceDefinition.Namespaces.OrderBy(n => n.Name))
             strbuilder.AppendLine(Render(ns, indent));
 
-        strbuilder.AppendLine($"{indentString}}}");
+        strbuilder.AppendLine(CultureInfo.InvariantCulture, $"{indentString}}}");
         return strbuilder.ToString();
     }
 
     private static bool IsDelegateType(Type? type) =>
         type?.Name is "Action" or not null &&
-        (type.Name == "Action" || type.Name.StartsWith("Action`") ||
-         type.Name.StartsWith("Func`") || type.Name.StartsWith("Predicate`"));
+        (type.Name == "Action" || type.Name.StartsWith("Action`", StringComparison.Ordinal) ||
+         type.Name.StartsWith("Func`", StringComparison.Ordinal) || type.Name.StartsWith("Predicate`", StringComparison.Ordinal));
 
     private static string FormatDefaultValue(ParameterDefinition parameter)
     {
@@ -723,10 +724,10 @@ public class TypeScriptRenderer
         return parameter.DefaultValue switch
         {
             Enum e => $"{parameter.Type.FriendlyName}.{e}",
-            bool b => b.ToString().ToLower(),
+            bool b => b.ToString(System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant(),
             _ => parameter.DefaultValue.ToString() ?? "null"
         };
     }
 }
 
-internal record NormalizedNonGenericTypeName(string TypeName, string? Namespace);
+internal sealed record NormalizedNonGenericTypeName(string TypeName, string? Namespace);

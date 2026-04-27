@@ -22,7 +22,7 @@ public static class TypeHelper
         if (type is null)
             return null;
 
-        if (parameters?.Any() == true)
+        if (parameters?.Length > 0)
         {
             return Activator.CreateInstance(type, parameters);
         }
@@ -38,7 +38,7 @@ public static class TypeHelper
         if (type is null)
             return null;
 
-        if (parameters?.Any() == true)
+        if (parameters?.Length > 0)
         {
             return ActivatorUtilities.CreateInstance(serviceProvider, type, parameters);
         }
@@ -50,7 +50,7 @@ public static class TypeHelper
 
     public static Type? FindConstructorReplaceType(string typeName)
     {
-        if (BuiltInTypeScriptType.Contains(typeName.ToLower()))
+        if (BuiltInTypeScriptType.Contains(typeName.ToLowerInvariant()))
         {
             return null;
         }

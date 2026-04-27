@@ -71,7 +71,7 @@ public class TypeScriptRendererDefaults
         if (!TypeMappings.TryGetValue(type, out var name))
         {
             var isAllowed = true;
-            if (allowedTypes?.Any() == true)
+            if (allowedTypes?.Count > 0)
             {
                 var checkType = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
                 if (!allowedTypes.Contains(checkType))

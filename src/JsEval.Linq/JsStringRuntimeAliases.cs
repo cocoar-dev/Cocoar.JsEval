@@ -18,11 +18,11 @@ namespace Cocoar.JsEval.Linq;
 /// </summary>
 public static class JsStringRuntimeAliases
 {
-    public static bool Contains(this string s, string value) => s.Contains(value);
-    public static bool StartsWith(this string s, string value) => s.StartsWith(value);
-    public static bool EndsWith(this string s, string value) => s.EndsWith(value);
-    public static int IndexOf(this string s, string value) => s.IndexOf(value);
-    public static string ToLower(this string s) => s.ToLower();
-    public static string ToUpper(this string s) => s.ToUpper();
+    public static bool Contains(this string s, string value) => s.Contains(value, StringComparison.Ordinal);
+    public static bool StartsWith(this string s, string value) => s.StartsWith(value, StringComparison.Ordinal);
+    public static bool EndsWith(this string s, string value) => s.EndsWith(value, StringComparison.Ordinal);
+    public static int IndexOf(this string s, string value) => s.IndexOf(value, StringComparison.Ordinal);
+    public static string ToLower(this string s) => s.ToLowerInvariant();
+    public static string ToUpper(this string s) => s.ToUpperInvariant();
     public static string Trim(this string s) => s.Trim();
 }

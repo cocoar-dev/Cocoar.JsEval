@@ -2,8 +2,11 @@ using Cocoar.JsEval;
 using Zio;
 using Zio.FileSystems;
 
+#pragma warning disable CA1716 // 'Module' in namespace conflicts with keyword — cannot rename without a breaking change
 namespace Cocoar.JsEval.Module.VirtualFileSystem;
+#pragma warning restore CA1716
 
+#pragma warning disable CA1822 // Instance methods required — Jint invokes these on a registered instance
 public class VirtualFileSystemModule : IJsModule
 {
     public SubFileSystem SubFileSystem(UPath uPath)
@@ -48,3 +51,4 @@ public class VirtualFileSystemModule : IJsModule
         return UPath.Combine(paths.Select(p => (UPath)p).ToArray());
     }
 }
+#pragma warning restore CA1822

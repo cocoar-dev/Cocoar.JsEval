@@ -5,8 +5,11 @@ using System.Text.Json.Nodes;
 using Cocoar.JsEval;
 using Scriban.Runtime;
 
+#pragma warning disable CA1716 // 'Module' in namespace conflicts with keyword — cannot rename without a breaking change
 namespace Cocoar.JsEval.Module.Template;
+#pragma warning restore CA1716
 
+#pragma warning disable CA1822 // Instance methods required — Jint invokes these on a registered instance
 public class TemplateModule : IJsModule
 {
     public string Parse(string template, object data)
@@ -18,11 +21,12 @@ public class TemplateModule : IJsModule
     {
         return Parse(template, data.ToList());
     }
+#pragma warning restore CA1822
 
-    private string Parse(string template, IEnumerable<object> data)
+    private static string Parse(string template, IEnumerable<object> data)
     {
         var jsonObject = new JsonObject();
-        data.Aggregate(jsonObject, (a, b) =>
+        jsonObject = data.Aggregate(jsonObject, (a, b) =>
         {
             var json = JsonHelper.ToJson(b);
             var jo = JsonHelper.ToJsonObject(json);

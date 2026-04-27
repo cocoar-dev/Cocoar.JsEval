@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 using Cocoar.JsEval.TsDefinition.ExtensionMethods;
@@ -18,7 +19,7 @@ public class PropertyDefinition : IDefinition
     public override string ToString()
     {
         var str = new StringBuilder();
-        str.Append($"{AccessModifier} {Type.Name} {Name} {{");
+        str.Append(CultureInfo.InvariantCulture, $"{AccessModifier} {Type.Name} {Name} {{");
 
         if (!string.IsNullOrWhiteSpace(GetterModifer))
             str.Append(GetterModifer != AccessModifier ? $" {GetterModifer} get;" : " get;");

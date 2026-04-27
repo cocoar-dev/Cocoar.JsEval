@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -40,7 +41,7 @@ internal sealed class LinqTsContributor : IJsTsDefinitionContributor
         sb.AppendLine();
         sb.AppendLine("declare const linq: {");
         foreach (var m in DeclaredInstanceMethods(typeof(LinqGlobal)))
-            sb.AppendLine($"    {m.Name}({RenderParameters(m)}): {MapType(m.ReturnType)};");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"    {m.Name}({RenderParameters(m)}): {MapType(m.ReturnType)};");
         sb.AppendLine("};");
         return sb.ToString();
     }
@@ -71,13 +72,13 @@ internal sealed class LinqTsContributor : IJsTsDefinitionContributor
 
     private static void EmitInterfaceAugmentation(StringBuilder sb, string targetInterface, Type shape, string? genericParam)
     {
-        sb.AppendLine($"interface {targetInterface} {{");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"interface {targetInterface} {{");
         foreach (var m in DeclaredInstanceMethods(shape))
         {
             var ret = MapType(m.ReturnType, genericParam);
             if (IsNullable(m.ReturnParameter))
                 ret = $"{ret} | undefined";
-            sb.AppendLine($"    {m.Name}{RenderMethodGenerics(m)}({RenderParameters(m)}): {ret};");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"    {m.Name}{RenderMethodGenerics(m)}({RenderParameters(m)}): {ret};");
         }
         sb.AppendLine("}");
         sb.AppendLine();
@@ -166,7 +167,7 @@ internal sealed class LinqTsContributor : IJsTsDefinitionContributor
     {
         sb.AppendLine("// ============================================================================");
         foreach (var line in lines)
-            sb.AppendLine($"// {line}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"// {line}");
         sb.AppendLine("// ============================================================================");
     }
 }

@@ -9,7 +9,7 @@ namespace Cocoar.JsEval.Engine.Fetch;
 /// Browser-compatible Response object returned by fetch().
 /// Matches the Web API: https://developer.mozilla.org/en-US/docs/Web/API/Response
 /// </summary>
-internal class FetchResponse : IDisposable
+internal sealed class FetchResponse : IDisposable
 {
     private readonly HttpResponseMessage _response;
     private string? _cachedBody;
@@ -63,6 +63,7 @@ internal class FetchResponse : IDisposable
         {
             _disposed = true;
             _response.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

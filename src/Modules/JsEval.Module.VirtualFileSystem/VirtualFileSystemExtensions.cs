@@ -1,7 +1,9 @@
 using Zio;
 using Zio.FileSystems;
 
+#pragma warning disable CA1716 // 'Module' in namespace conflicts with keyword — cannot rename without a breaking change
 namespace Cocoar.JsEval.Module.VirtualFileSystem;
+#pragma warning restore CA1716
 
 public static class VirtualFileSystemExtensions
 {

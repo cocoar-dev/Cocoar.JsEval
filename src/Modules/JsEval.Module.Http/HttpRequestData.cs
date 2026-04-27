@@ -11,7 +11,9 @@ using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Primitives;
 
+#pragma warning disable CA1716 // Module in namespace -- cannot rename without breaking change
 namespace Cocoar.JsEval.Module.Http;
+#pragma warning restore CA1716
 
 public class HttpRequestData
 {
@@ -24,11 +26,11 @@ public class HttpRequestData
 
     public HttpRequestMessage BuildHttpRequestMessage(HttpHandlerOptions httpHandlerOptions, HttpMethod httpMethod, object? content)
     {
-        var requestUri = !PathSegments.Any()
+        var requestUri = PathSegments.Count == 0
             ? httpHandlerOptions.RequestUri
             : new Uri(httpHandlerOptions.RequestUri, string.Join('/', PathSegments));
 
-        if (QueryParameters.Any())
+        if (!QueryParameters.IsEmpty)
         {
             var qb = new QueryBuilder();
             if (!string.IsNullOrWhiteSpace(requestUri.Query))
@@ -36,12 +38,12 @@ public class HttpRequestData
                 var query = QueryHelpers.ParseQuery(requestUri.Query);
                 foreach (var kv in query)
                 {
-                    qb.Add(kv.Key, kv.Value.ToArray());
+                    qb.Add(kv.Key, kv.Value.OfType<string>());
                 }
             }
             foreach (var kv in QueryParameters)
             {
-                qb.Add(kv.Key, kv.Value.ToArray());
+                qb.Add(kv.Key, kv.Value.OfType<string>());
             }
 
             var uriBuilder = new UriBuilder(requestUri)
@@ -59,7 +61,7 @@ public class HttpRequestData
             message.Content = CreateHttpContent(content);
         }
 
-        if (Headers.Any())
+        if (!Headers.IsEmpty)
         {
             message.Headers.Clear();
             foreach (var kv in Headers)
@@ -79,7 +81,7 @@ public class HttpRequestData
         return message;
     }
 
-    private HttpContent? CreateHttpContent(object? content)
+    private static HttpContent? CreateHttpContent(object? content)
     {
         if (content is null)
             return null;

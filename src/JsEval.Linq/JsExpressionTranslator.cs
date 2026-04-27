@@ -72,7 +72,8 @@ public static class JsExpressionTranslator
             throw new ArgumentException($"Expected a JS function, got {function.GetType().Name}", nameof(function));
 
         options ??= new TranslationOptions();
-        var decl = sf.FunctionDeclaration;
+        var decl = sf.FunctionDeclaration
+            ?? throw new ArgumentException("ScriptFunction has no FunctionDeclaration", nameof(function));
         var parameter = BuildParameter(decl, parameterType);
         var ctx = new Context(engine, options).Push(parameter);
         var body = Visit(GetBodyExpression(decl), ctx);
@@ -205,7 +206,7 @@ public static class JsExpressionTranslator
         throw new InvalidOperationException($"Unresolved identifier '{id.Name}' (pass Engine for closure support)");
     }
 
-    private static LinqExpr VisitMember(AstMember me, Context ctx)
+    private static System.Linq.Expressions.MemberExpression VisitMember(AstMember me, Context ctx)
     {
         var target = Visit((AstExpr)me.Object, ctx);
         var propName = ResolveMemberName(me);
@@ -235,7 +236,7 @@ public static class JsExpressionTranslator
     /// all types but with conflicting CLR types. On success emits
     /// <c>Property(Convert(param, narrowings[0]), prop)</c>.
     /// </summary>
-    private static LinqExpr? TryResolveViaIntersection(
+    private static System.Linq.Expressions.MemberExpression? TryResolveViaIntersection(
         ParameterExpression param, string propName, List<Type> narrowings)
     {
         PropertyInfo? resolved = null;
@@ -252,7 +253,7 @@ public static class JsExpressionTranslator
                     $"{p.DeclaringType!.Name}: {p.PropertyType.Name})");
         }
         return resolved == null ? null
-            : LinqExpr.Property(LinqExpr.Convert(param, narrowings[0]), resolved);
+            : (System.Linq.Expressions.MemberExpression)LinqExpr.Property(LinqExpr.Convert(param, narrowings[0]), resolved);
     }
 
     /// <summary>
@@ -503,8 +504,8 @@ public static class JsExpressionTranslator
         _ => null
     };
 
-    private static LinqExpr TranslateArrayMethod(LinqExpr target, Type elementType, string jsMethod,
-        in NodeList<AstExpr?> jsArgs, Context ctx)
+    private static System.Linq.Expressions.MethodCallExpression TranslateArrayMethod(LinqExpr target, Type elementType, string jsMethod,
+        in NodeList<AstExpr> jsArgs, Context ctx)
     {
         var linqName = NormalizeArrayMethod(jsMethod)
             ?? throw new NotSupportedException($"Array method '{jsMethod}' not supported");
@@ -592,7 +593,7 @@ public static class JsExpressionTranslator
 
     /// <summary>
     /// Operators for which `null op nonNullConst` evaluates to <c>false</c> in
-    /// CLR lifted semantics — which matches `false && …`, so flattening is
+    /// CLR lifted semantics — which matches <c>false &amp;&amp; …</c>, so flattening is
     /// semantically safe. Excludes <c>!=</c> (null != x is <c>true</c>, needs a
     /// different lowering — not implemented).
     /// </summary>
@@ -837,7 +838,7 @@ public static class JsExpressionTranslator
         return LinqExpr.Negate(operand);
     }
 
-    private static LinqExpr VisitConditional(AstConditional cond, Context ctx)
+    private static System.Linq.Expressions.ConditionalExpression VisitConditional(AstConditional cond, Context ctx)
     {
         var test = NormalizeToBool(Visit((AstExpr)cond.Test, ctx));
         var ifTrue = Visit((AstExpr)cond.Consequent, ctx);
@@ -970,9 +971,9 @@ public static class JsExpressionTranslator
     {
         if (left.Type == right.Type) return (left, right);
         if (right is ConstantExpression rc && IsNumeric(left.Type) && IsNumeric(right.Type))
-            return (left, LinqExpr.Constant(Convert.ChangeType(rc.Value, left.Type), left.Type));
+            return (left, LinqExpr.Constant(Convert.ChangeType(rc.Value, left.Type, System.Globalization.CultureInfo.InvariantCulture), left.Type));
         if (left is ConstantExpression lc && IsNumeric(left.Type) && IsNumeric(right.Type))
-            return (LinqExpr.Constant(Convert.ChangeType(lc.Value, right.Type), right.Type), right);
+            return (LinqExpr.Constant(Convert.ChangeType(lc.Value, right.Type, System.Globalization.CultureInfo.InvariantCulture), right.Type), right);
         return (left, right);
     }
 

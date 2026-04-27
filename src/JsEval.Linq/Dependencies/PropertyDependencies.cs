@@ -5,7 +5,7 @@ namespace Cocoar.JsEval.Linq.Dependencies;
 /// </summary>
 /// <remarks>
 /// Paths are dotted (e.g. <c>"Address.City"</c>). Each path's root is guaranteed
-/// to be a property of the root parameter type <typeparamref name="T"/> of the
+/// to be a property of the root parameter type of the
 /// collected expression — *not* a property of a closure-captured constant.
 /// </remarks>
 public sealed class PropertyDependencies

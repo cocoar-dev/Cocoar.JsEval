@@ -25,7 +25,7 @@ public sealed class JsTypeGlobal
 {
     private readonly IReadOnlyList<DiscriminatorMapping> _mappings;
     private readonly IReadOnlyDictionary<string, Type> _typeAliases;
-    private readonly IReadOnlyDictionary<string, Type> _namespaceMapped;
+    private readonly Dictionary<string, Type> _namespaceMapped;
 
     public JsTypeGlobal(
         IReadOnlyList<DiscriminatorMapping> mappings,
@@ -37,7 +37,7 @@ public sealed class JsTypeGlobal
         _namespaceMapped = BuildNamespaceMapped(mappings, typeAliases, namespaceMappings);
     }
 
-    private static IReadOnlyDictionary<string, Type> BuildNamespaceMapped(
+    private static Dictionary<string, Type> BuildNamespaceMapped(
         IReadOnlyList<DiscriminatorMapping> mappings,
         IReadOnlyDictionary<string, Type> typeAliases,
         IReadOnlyList<(string Source, string Target)> namespaceMappings)

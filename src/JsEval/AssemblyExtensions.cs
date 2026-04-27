@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Reflection;
 
@@ -24,7 +25,7 @@ public static class AssemblyExtensions
         var names = assembly.GetManifestResourceNames();
         foreach (var name in names)
         {
-            if (name.EndsWith(partialName) || name.Contains($".{partialName}"))
+            if (name.EndsWith(partialName, StringComparison.Ordinal) || name.Contains($".{partialName}", StringComparison.Ordinal))
             {
                 return name;
             }

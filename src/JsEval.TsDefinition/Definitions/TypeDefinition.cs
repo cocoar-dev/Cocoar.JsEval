@@ -164,7 +164,7 @@ public class TypeDefinition : IDefinition
             tDesc.EnumValueDefinitions = names.Select(n => new EnumValueDefinition
             {
                 Name = n,
-                Value = Convert.ChangeType(Enum.Parse(type, n), fields.First().FieldType)
+                Value = Convert.ChangeType(Enum.Parse(type, n), fields.First().FieldType, System.Globalization.CultureInfo.InvariantCulture)
             }).ToList();
         }
         else

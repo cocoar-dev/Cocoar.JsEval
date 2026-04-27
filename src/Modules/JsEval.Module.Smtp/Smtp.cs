@@ -4,8 +4,11 @@ using System.Threading.Tasks;
 using Cocoar.JsEval;
 using MailKit.Security;
 
+#pragma warning disable CA1716 // 'Module' in namespace conflicts with keyword — cannot rename without a breaking change
 namespace Cocoar.JsEval.Module.Smtp;
+#pragma warning restore CA1716
 
+#pragma warning disable CA1822 // Instance methods required — Jint invokes these on a registered instance
 public class SmtpModule : IJsModule
 {
     public MSmtpClient Client()
@@ -18,6 +21,7 @@ public class SmtpModule : IJsModule
         return new MMailMessage();
     }
 }
+#pragma warning restore CA1822
 
 public class MSmtpClient
 {
@@ -68,7 +72,9 @@ public class MSmtpClient
 
         if (options.IgnoreSSLError)
         {
+#pragma warning disable CA5359 // Intentional: user-opted-in SSL error bypass for dev/internal scenarios
             smtpClient.ServerCertificateValidationCallback += (sender, certificate, chain, errors) => true;
+#pragma warning restore CA5359
         }
 
         SecureSocketOptions secOpts = SecureSocketOptions.Auto;
@@ -94,7 +100,9 @@ public class MSmtpClient
 
         if (options.IgnoreSSLError)
         {
+#pragma warning disable CA5359 // Intentional: user-opted-in SSL error bypass for dev/internal scenarios
             smtpClient.ServerCertificateValidationCallback += (sender, certificate, chain, errors) => true;
+#pragma warning restore CA5359
         }
 
         SecureSocketOptions secOpts = SecureSocketOptions.Auto;

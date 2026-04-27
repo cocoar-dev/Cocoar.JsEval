@@ -8,7 +8,9 @@ using Cocoar.Reflectensions.ExtensionMethods;
 using Cocoar.JsEval.Module.Http.ExtensionMethods;
 using Cocoar.JsEval;
 
+#pragma warning disable CA1716 // Module in namespace -- cannot rename without breaking change
 namespace Cocoar.JsEval.Module.Http;
+#pragma warning restore CA1716
 
 public class HttpResponse : IDisposable
 {
@@ -50,5 +52,6 @@ public class HttpResponse : IDisposable
     public void Dispose()
     {
         _httpResponseMessage?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

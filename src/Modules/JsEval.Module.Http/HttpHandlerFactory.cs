@@ -5,7 +5,9 @@ using System.Net.Http;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 
+#pragma warning disable CA1716 // 'Module' in namespace conflicts with keyword — cannot rename without a breaking change
 namespace Cocoar.JsEval.Module.Http;
+#pragma warning restore CA1716
 
 public static class HttpHandlerFactory
 {
@@ -24,7 +26,7 @@ public static class HttpHandlerFactory
         return HttpClients.GetOrAdd(roHttpHandlerOptions, _ => new HttpClient(Build(handlerOptions)));
     }
 
-    private static HttpMessageHandler ValueFactory(HttpHandlerOptions handlerOptions)
+    private static SocketsHttpHandler ValueFactory(HttpHandlerOptions handlerOptions)
     {
         var socketsHandler = new SocketsHttpHandler
         {
@@ -55,12 +57,14 @@ public static class HttpHandlerFactory
 
         if (handlerOptions.IgnoreCertificateErrors)
         {
+#pragma warning disable CA5359 // Intentional: user-opted-in certificate bypass for dev/internal scenarios
             socketsHandler.SslOptions.RemoteCertificateValidationCallback +=
                 (sender, certificate, chain, errors) => true;
+#pragma warning restore CA5359
         }
 
         socketsHandler.SslOptions.AllowRenegotiation = true;
         socketsHandler.SslOptions.EnabledSslProtocols = SslProtocols.None;
-        return socketsHandler;
+        return socketsHandler; // SocketsHttpHandler (concrete) rather than HttpMessageHandler (interface) — CA1859
     }
 }

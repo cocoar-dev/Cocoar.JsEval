@@ -139,10 +139,12 @@ var console = {
 
     private void RegisterConsole()
     {
+#pragma warning disable CA1848, CA1873 // LoggerMessage.Define not needed for console bridge
         _engine.SetValue("__log_info", new Action<string>(msg => _logger.LogInformation("{Message}", msg)));
         _engine.SetValue("__log_warn", new Action<string>(msg => _logger.LogWarning("{Message}", msg)));
         _engine.SetValue("__log_error", new Action<string>(msg => _logger.LogError("{Message}", msg)));
         _engine.SetValue("__log_debug", new Action<string>(msg => _logger.LogDebug("{Message}", msg)));
+#pragma warning restore CA1848, CA1873
 
         _engine.Execute(ConsoleScript);
     }
@@ -453,7 +455,7 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
             {
                 moduleName = $"__main_{_nextMainModuleId++}__";
                 var preparedModule = prepared.Prepared;
-                _engine.Modules.Add(moduleName, builder => builder.AddModule(ref preparedModule));
+                _engine.Modules.Add(moduleName, builder => builder.AddModule(in preparedModule));
                 _preparedModuleNames[prepared] = moduleName;
             }
 
@@ -477,15 +479,15 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
     public JsFunction? GetFunction(string name)
     {
         var val = InternalGetValue(name);
-        if (val is ScriptFunction func)
+        if (val is ScriptFunction func && func.FunctionDeclaration is { } decl)
         {
             var paramNames = new List<string>();
-            foreach (var param in func.FunctionDeclaration.Params)
+            foreach (var param in decl.Params)
             {
                 if (param is Identifier identifier)
                     paramNames.Add(identifier.Name);
             }
-            return new JsFunction(func.FunctionDeclaration.Id?.Name ?? name, paramNames, InvokeFunction);
+            return new JsFunction(decl.Id?.Name ?? name, paramNames, InvokeFunction);
         }
         return null;
     }
@@ -610,6 +612,7 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
         }
 
         _cancellationTokenSource.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     public ValueTask DisposeAsync()

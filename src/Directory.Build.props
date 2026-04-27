@@ -44,6 +44,8 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- CS1591: XML doc comments on public API — suppressed until a dedicated doc-writing pass -->
+    <NoWarn>$(NoWarn);CS1591;CS0419</NoWarn>
   </PropertyGroup>
 
   <!-- ===== PACKAGE REFERENCES (Global) ===== -->

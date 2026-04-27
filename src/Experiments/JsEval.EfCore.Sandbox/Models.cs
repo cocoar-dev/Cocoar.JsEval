@@ -56,12 +56,20 @@ public abstract class Participant
 public class PersonParticipant : Participant
 {
     public string? Firstname { get; set; }
-    public string? Lastname { get; set; }
+    public string? Lastname  { get; set; }
+    public string? Email     { get; set; }
 }
 
 public class CompanyParticipant : Participant
 {
     public string? VatNumber { get; set; }
+    public string? Email     { get; set; }
+}
+
+/// <summary>Service accounts — no Email, used to verify the intersection boundary.</summary>
+public class ServiceAccountParticipant : Participant
+{
+    public string? ServiceName { get; set; }
 }
 
 public class AppDb : DbContext
@@ -86,6 +94,7 @@ public class AppDb : DbContext
         mb.Entity<Participant>()
             .HasDiscriminator<string>("Discriminator")
             .HasValue<PersonParticipant>("person")
-            .HasValue<CompanyParticipant>("company");
+            .HasValue<CompanyParticipant>("company")
+            .HasValue<ServiceAccountParticipant>("service-account");
     }
 }

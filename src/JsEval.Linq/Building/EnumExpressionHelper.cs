@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 
 namespace Cocoar.JsEval.Linq.Building;
@@ -76,7 +77,7 @@ internal static class EnumExpressionHelper
         var param = Expression.Parameter(typeof(T), "x");
         var property = Expression.Property(param, propertyName);
         var parsed = Enum.Parse(enumType, value, ignoreCase: true);
-        var intValue = Convert.ToInt32(parsed);
+        var intValue = Convert.ToInt32(parsed, CultureInfo.InvariantCulture);
         var convertProperty = Expression.Convert(property, typeof(int));
         var constant = Expression.Constant(intValue, typeof(int));
         return Expression.Lambda<Func<T, bool>>(Expression.Equal(convertProperty, constant), param);
@@ -97,7 +98,7 @@ internal static class EnumExpressionHelper
     public static Expression BuildAsIntComparison<TEnum>(MemberExpression enumProperty, TEnum value) where TEnum : struct, Enum
     {
         var convertProperty = Expression.Convert(enumProperty, typeof(int));
-        var intValue = Convert.ToInt32(value);
+        var intValue = Convert.ToInt32(value, CultureInfo.InvariantCulture);
         var constant = Expression.Constant(intValue, typeof(int));
         return Expression.Equal(convertProperty, constant);
     }

@@ -4,9 +4,11 @@ using System.Linq;
 using System.Text;
 using MimeKit;
 
+#pragma warning disable CA1716 // 'Module' in namespace conflicts with keyword — cannot rename without a breaking change
 namespace Cocoar.JsEval.Module.Smtp;
+#pragma warning restore CA1716
 
-public class MMailMessage
+public class MMailMessage : IDisposable
 {
     internal MimeMessage message;
     private BodyBuilder? _bodyBuilder;
@@ -217,5 +219,11 @@ public class MMailMessage
             mMailMessage.message.Body = mMailMessage._bodyBuilder.ToMessageBody();
 
         return mMailMessage.message;
+    }
+
+    public void Dispose()
+    {
+        message.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

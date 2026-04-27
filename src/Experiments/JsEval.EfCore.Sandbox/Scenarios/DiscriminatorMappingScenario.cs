@@ -8,8 +8,9 @@ public static class DiscriminatorMappingScenario
 {
     private static readonly List<DiscriminatorMapping> Mappings =
     [
-        new(typeof(Participant), "person",  typeof(PersonParticipant)),
-        new(typeof(Participant), "company", typeof(CompanyParticipant)),
+        new(typeof(Participant), "person",          typeof(PersonParticipant)),
+        new(typeof(Participant), "company",         typeof(CompanyParticipant)),
+        new(typeof(Participant), "service-account", typeof(ServiceAccountParticipant)),
     ];
 
     private static readonly TranslationOptions TranslationOpts = new()
@@ -20,11 +21,12 @@ public static class DiscriminatorMappingScenario
     public static async Task Seed(AppDb db)
     {
         db.Participants.AddRange(
-            new PersonParticipant  { Name = "Alice Müller",   Firstname = "Alice",   Lastname = "Müller" },
-            new PersonParticipant  { Name = "Bob Huber",      Firstname = "Bob",     Lastname = "Huber" },
-            new CompanyParticipant { Name = "Acme Corp",      VatNumber = "ATU1234" },
-            new CompanyParticipant { Name = "Widgets GmbH",   VatNumber = "ATU5678" },
-            new PersonParticipant  { Name = "Anna Schmidt",   Firstname = "Anna",    Lastname = "Schmidt" }
+            new PersonParticipant       { Name = "Alice Müller",  Firstname = "Alice", Lastname = "Müller",  Email = "alice@example.com" },
+            new PersonParticipant       { Name = "Bob Huber",     Firstname = "Bob",   Lastname = "Huber",   Email = "bob@other.com"     },
+            new PersonParticipant       { Name = "Anna Schmidt",  Firstname = "Anna",  Lastname = "Schmidt", Email = "anna@example.com"  },
+            new CompanyParticipant      { Name = "Acme Corp",     VatNumber = "ATU1234", Email = "info@acme.example.com"   },
+            new CompanyParticipant      { Name = "Widgets GmbH",  VatNumber = "ATU5678", Email = "office@widgets.other.com" },
+            new ServiceAccountParticipant { Name = "deploy-bot", ServiceName = "ci-pipeline" }
         );
         await db.SaveChangesAsync();
     }
@@ -88,6 +90,25 @@ public static class DiscriminatorMappingScenario
         Console.WriteLine($"  Expression : {exprOneOfNarrow}");
         var narrowedOneOf = await db.Participants.AsNoTracking().Where(exprOneOfNarrow).ToListAsync();
         Console.WriteLine($"  Rows ({narrowedOneOf.Count}): {string.Join(", ", narrowedOneOf.Select(p => p.Name))}");
+
+        // ── 7. OR + AND intersection narrowing ───────────────────────────────
+        // Person AND Company both have Email; ServiceAccount doesn't.
+        // Principal (base) has NO Email.
+        // (Type.Is(p,'person') || Type.Is(p,'company')) && p.Email.endsWith('@example.com')
+        // CollectNarrowings collects PersonParticipant + CompanyParticipant from the OrElse.
+        // TryResolveViaIntersection finds Email on both → emits Convert(p, PersonParticipant).Email.
+        Console.WriteLine("\nOR + AND intersection narrowing (shared Email on person+company, not on service-account or base):");
+        var jsFnIntersect = engine.Evaluate(
+            "(p) => (Type.Is(p, 'person') || Type.Is(p, 'company')) && p.Email.endsWith('@example.com')");
+        var exprIntersect = JsExpressionTranslator.Translate<Participant, bool>(jsFnIntersect, engine, TranslationOpts);
+        var sqlIntersect  = db.Participants.AsNoTracking().Where(exprIntersect).ToQueryString();
+        Console.WriteLine($"  Expression : {exprIntersect}");
+        Console.WriteLine($"  SQL        : {sqlIntersect.Replace("\n", " ")}");
+        var intersected = await db.Participants.AsNoTracking().Where(exprIntersect).ToListAsync();
+        Console.WriteLine($"  Rows ({intersected.Count}): {string.Join(", ", intersected.Select(p => p.Name))}");
+
+        // service-account is excluded both by the type filter AND by having no Email.
+        Console.WriteLine($"  service-account in result: {intersected.Any(p => p is ServiceAccountParticipant)} (expected: false)");
 
         await Task.CompletedTask;
     }

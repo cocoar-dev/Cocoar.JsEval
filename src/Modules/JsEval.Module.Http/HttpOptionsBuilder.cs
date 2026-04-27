@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography.X509Certificates;
 
+#pragma warning disable CA1716 // Module in namespace -- cannot rename without breaking change
 namespace Cocoar.JsEval.Module.Http;
+#pragma warning restore CA1716
 
 public class HttpOptionsBuilder
 {
@@ -59,14 +61,14 @@ public class HttpOptionsBuilder
 
     public HttpOptionsBuilder AddClientCertificate(byte[] bytes)
     {
-        var cert = new X509Certificate2(bytes);
+        var cert = X509CertificateLoader.LoadCertificate(bytes);
         _httpHandlerOptions.ClientCertificates.Add(cert);
         return this;
     }
 
     public HttpOptionsBuilder AddClientCertificate(byte[] bytes, string password)
     {
-        var cert = new X509Certificate2(bytes, password);
+        var cert = X509CertificateLoader.LoadPkcs12(bytes, password);
         _httpHandlerOptions.ClientCertificates.Add(cert);
         return this;
     }

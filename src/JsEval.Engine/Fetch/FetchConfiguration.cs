@@ -11,7 +11,7 @@ namespace Cocoar.JsEval.Engine.Fetch;
 /// In browser environments this object doesn't exist, so scripts should use
 /// optional chaining: fetchOptions?.ignoreCertificateErrors(true)
 /// </summary>
-internal class FetchConfiguration
+internal sealed class FetchConfiguration : IDisposable
 {
     private bool _ignoreCertificateErrors;
     private int _timeoutSeconds = 30;
@@ -47,6 +47,13 @@ internal class FetchConfiguration
         return this;
     }
 
+    public void Dispose()
+    {
+        _client?.Dispose();
+        _client = null;
+        GC.SuppressFinalize(this);
+    }
+
     internal HttpClient GetClient()
     {
         if (!_dirty && _client is not null)
@@ -68,8 +75,10 @@ internal class FetchConfiguration
 
             if (_ignoreCertificateErrors)
             {
+#pragma warning disable CA5359 // Intentional: user-opted-in certificate bypass for dev/internal scenarios
                 handler.SslOptions.RemoteCertificateValidationCallback =
                     (_, _, _, _) => true;
+#pragma warning restore CA5359
             }
 
             handler.SslOptions.EnabledSslProtocols = SslProtocols.None;
