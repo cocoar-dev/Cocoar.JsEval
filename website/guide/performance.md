@@ -36,10 +36,13 @@ shows the same script (`query.WhereResponsible(ctx.UserId)`) executed via differ
 | `Evaluate(string)`             |       1.8 µs  |         30 µs  |            45 KB   |
 | `Evaluate(prepared)`           |       1.4 µs  |         25 µs  |            43 KB   |
 | `ExecuteAsync(string)`         |      16 µs    |              — |            49 KB   |
+| `ExecuteAsync(prepared)`       |     ~14 µs    |              — |           ~47 KB   |
 
 The overhead is dominated by engine creation (~10 µs), not the script itself. The
 module path (`ExecuteAsync`) is ~10× the lightweight `Evaluate` path because it
-goes through the full ES-module resolver + linker.
+goes through the full ES-module resolver + linker. `ExecuteAsync(prepared)` saves
+the parse cost (~6 µs) on the first call — the gain is modest on a fresh engine
+but becomes ~9× on a **pooled** engine (see table below).
 
 ### Pooled Engine (reused instance)
 

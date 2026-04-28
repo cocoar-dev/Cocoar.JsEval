@@ -96,6 +96,7 @@ var data = engine.GetValue<string>("data");
 | Method | Module System | async | Prepared | Use Case |
 |---|:---:|:---:|:---:|---|
 | `ExecuteAsync(string)` | Yes | Yes | No | **Standard** -- use when you don't know what's in the script |
+| `ExecuteAsync(JsPreparedModule)` | Yes | Yes | Yes | Max performance for modules -- pre-parsed, ~9× faster on pooled engine |
 | `Evaluate(string)` | No | No | No | Lightweight sync -- when you control the script |
 | `Evaluate(JsPreparedScript)` | No | No | Yes | Max performance -- pre-parsed, reusable |
 | `EvaluateAsync(string)` | No | Yes | No | Lightweight async -- no modules but needs await |
@@ -106,7 +107,11 @@ var data = engine.GetValue<string>("data");
 
 ## Prepared Scripts
 
-`JsEngine.Prepare(script)` returns a `JsPreparedScript` that can be cached and reused. The script is parsed once, avoiding re-parsing on every execution.
+Both execution paths have a prepared variant that pre-parses the script once and reuses it across calls.
+
+### Prepare + Evaluate (no modules)
+
+`JsEngine.Prepare(script)` returns a `JsPreparedScript` for the lightweight `Evaluate` path.
 
 ```csharp
 // Parse once (thread-safe, shareable across engine instances)
@@ -120,8 +125,25 @@ engine.Evaluate(prepared);
 var result = engine.GetValue<int>("x"); // 30
 ```
 
+### PrepareModule + ExecuteAsync (with modules)
+
+`JsEngine.PrepareModule(script)` returns a `JsPreparedModule` for the `ExecuteAsync` path. On a pooled engine this is ~9× faster than `ExecuteAsync(string)` because the parse step is skipped and the module cache is seeded immediately.
+
+```csharp
+// Parse once — at startup or when the script changes
+var preparedModule = JsEngine.PrepareModule(@"
+import * as common from 'common'
+export function greet(name) { return `Hello, ${name}!`; }
+");
+
+// Execute many times
+var engine = serviceProvider.GetRequiredService<JsEngine>();
+await engine.ExecuteAsync(preparedModule);
+var result = engine.InvokeFunction<string>("greet", "World"); // "Hello, World!"
+```
+
 ::: tip
-`JsPreparedScript` is thread-safe and can be stored as a static field or in a cache. Share it across engine instances to avoid redundant parsing.
+Both `JsPreparedScript` and `JsPreparedModule` are thread-safe and can be stored as static fields or in a shared cache. Share them across engine instances to avoid redundant parsing.
 :::
 
 ## Engine Reuse

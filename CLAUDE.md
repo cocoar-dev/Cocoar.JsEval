@@ -48,6 +48,7 @@ cd website && npm run dev
 | Method | Module System | async | Use Case |
 |---|:---:|:---:|---|
 | `ExecuteAsync(string)` | Yes | Yes | **Standard** — use when you don't know what the script contains |
+| `ExecuteAsync(JsPreparedModule)` | Yes | Yes | Max performance for modules — pre-parsed, ~9× faster on pooled engine |
 | `Evaluate(string)` | No | No | Lightweight sync — when you control the script |
 | `Evaluate(JsPreparedScript)` | No | No | Max performance — pre-parsed, reusable |
 | `EvaluateAsync(string)` | No | Yes | Lightweight async — no modules but needs await |
