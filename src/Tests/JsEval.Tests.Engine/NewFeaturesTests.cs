@@ -261,7 +261,7 @@ var result;
     [Fact]
     public void ConsoleLog_DoesNotThrow()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableConsole());
 
         engine.Evaluate("console.log('hello');");
     }
@@ -269,7 +269,7 @@ var result;
     [Fact]
     public void ConsoleWarn_DoesNotThrow()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableConsole());
 
         engine.Evaluate("console.warn('warning');");
     }
@@ -277,7 +277,7 @@ var result;
     [Fact]
     public void ConsoleError_DoesNotThrow()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableConsole());
 
         engine.Evaluate("console.error('error');");
     }
@@ -285,7 +285,7 @@ var result;
     [Fact]
     public void ConsoleLog_MultipleArgs_DoesNotThrow()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableConsole());
 
         engine.Evaluate("console.log('hello', 42, true);");
     }
@@ -293,7 +293,7 @@ var result;
     [Fact]
     public void ConsoleDebug_DoesNotThrow()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableConsole());
 
         engine.Evaluate("console.debug('debug message');");
     }
@@ -301,7 +301,7 @@ var result;
     [Fact]
     public void ConsoleInfo_DoesNotThrow()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableConsole());
 
         engine.Evaluate("console.info('info message');");
     }
@@ -313,7 +313,7 @@ var result;
     [Fact]
     public void SetTimeout_IsAvailable()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableTimers());
 
         // setTimeout should be defined and callable without throwing
         engine.Evaluate("var called = false; setTimeout(function() { called = true; }, 1);");
@@ -322,7 +322,7 @@ var result;
     [Fact]
     public void ClearTimeout_IsAvailable()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableTimers());
 
         engine.Evaluate("var id = setTimeout(function() {}, 1000); clearTimeout(id);");
     }
@@ -330,7 +330,7 @@ var result;
     [Fact]
     public void SetInterval_IsAvailable()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableTimers());
 
         engine.Evaluate("var id = setInterval(function() {}, 1000); clearInterval(id);");
     }
@@ -338,7 +338,7 @@ var result;
     [Fact]
     public void SetTimeout_ReturnsId()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableTimers());
 
         engine.Evaluate("var timerId = setTimeout(function() {}, 100);");
         var id = engine.GetValue<int>("timerId");
@@ -349,7 +349,7 @@ var result;
     [Fact]
     public void SetInterval_ReturnsId()
     {
-        using var engine = CreateEngine();
+        using var engine = CreateEngine(b => b.EnableTimers());
 
         engine.Evaluate("var intervalId = setInterval(function() {}, 100); clearInterval(intervalId);");
         var id = engine.GetValue<int>("intervalId");

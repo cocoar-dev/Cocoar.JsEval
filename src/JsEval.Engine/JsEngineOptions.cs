@@ -15,11 +15,39 @@ public sealed class JsEngineOptions
     {
         JintOptions = new Options()
             .CatchClrExceptions()
-            .AllowOperatorOverloading();
+            .AllowOperatorOverloading()
+            // Defense-in-depth defaults (4.0). Stop runaway scripts even when
+            // the consumer doesn't ship its own wall-clock budget. Override
+            // via WithExecutionTimeout / WithMaxStatements; pass
+            // Timeout.InfiniteTimeSpan or 0 to disable.
+            .TimeoutInterval(TimeSpan.FromSeconds(10))
+            .MaxStatements(5_000_000);
 
         // Enable automatic .NET Task/ValueTask → JS Promise conversion.
         // Scripts can `await` .NET async methods directly.
         JintOptions.ExperimentalFeatures = ExperimentalFeature.TaskInterop;
+    }
+
+    /// <summary>
+    /// Maximum wall-clock time a single script execution may run before Jint
+    /// raises <see cref="Jint.Runtime.ExecutionCanceledException"/>. Default: <c>10 s</c>.
+    /// Pass <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to disable.
+    /// </summary>
+    public JsEngineOptions WithExecutionTimeout(TimeSpan timeout)
+    {
+        JintOptions.TimeoutInterval(timeout);
+        return this;
+    }
+
+    /// <summary>
+    /// Maximum number of statements a single script execution may evaluate
+    /// before Jint raises <see cref="Jint.Runtime.StatementsCountOverflowException"/>.
+    /// Default: <c>5 000 000</c>. Pass <c>0</c> to disable.
+    /// </summary>
+    public JsEngineOptions WithMaxStatements(int maxStatements)
+    {
+        JintOptions.MaxStatements(maxStatements);
+        return this;
     }
 
     public JsEngineOptions EnableDebugMode()
@@ -76,6 +104,80 @@ public sealed class JsEngineOptions
     public JsEngineOptions EnableFetch()
     {
         FetchEnabled = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Enable the <c>NewObject(typeName, args)</c> JS global. Off by default —
+    /// when enabled, only types registered via <c>AddTypeAlias</c> resolve
+    /// (alias-only). To allow assembly-walk fallback, additionally call
+    /// <c>EnableNewObjectAssemblyFallback(...)</c> with an explicit allowlist.
+    /// </summary>
+    internal bool NewObjectEnabled { get; private set; }
+
+    public JsEngineOptions EnableNewObject()
+    {
+        NewObjectEnabled = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Allowlist of assemblies <c>NewObject(typeName)</c> may consult when no
+    /// matching <see cref="TypeAliases"/> entry is found. Empty by default —
+    /// in which case <c>NewObject</c> resolves alias-only and returns
+    /// <c>null</c> for unknown names. Repeated calls accumulate assemblies.
+    /// Independent of <see cref="NewObjectEnabled"/>: a populated allowlist
+    /// has no effect unless <c>EnableNewObject()</c> is also called.
+    /// </summary>
+    internal List<Assembly> NewObjectAssemblyFallback { get; } = [];
+
+    public JsEngineOptions EnableNewObjectAssemblyFallback(params Assembly[] assemblies)
+    {
+        ArgumentNullException.ThrowIfNull(assemblies);
+        foreach (var asm in assemblies)
+            if (asm is not null && !NewObjectAssemblyFallback.Contains(asm))
+                NewObjectAssemblyFallback.Add(asm);
+        return this;
+    }
+
+    /// <summary>
+    /// Enable the <c>require(name)</c> JS global for runtime module loading.
+    /// Off by default — modules are normally consumed via ES <c>import</c>.
+    /// </summary>
+    internal bool RequireEnabled { get; private set; }
+
+    public JsEngineOptions EnableRequire()
+    {
+        RequireEnabled = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Enable the <c>setTimeout</c>/<c>setInterval</c>/<c>clearTimeout</c>/
+    /// <c>clearInterval</c> JS globals. Off by default — fire-and-forget
+    /// callbacks outlive the script and consume <see cref="System.Threading.Tasks.TaskScheduler"/>
+    /// resources, which is rarely desirable for embedded sandbox scripts.
+    /// </summary>
+    internal bool TimersEnabled { get; private set; }
+
+    public JsEngineOptions EnableTimers()
+    {
+        TimersEnabled = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Enable the <c>console.log/info/warn/error/debug</c> bridge to the
+    /// host's <see cref="Microsoft.Extensions.Logging.ILogger"/>. Off by default —
+    /// untrusted scripts can flood centralised log infrastructure (Serilog,
+    /// ELK, Cloud Logging). Enable explicitly when you want script output
+    /// to reach host logs.
+    /// </summary>
+    internal bool ConsoleEnabled { get; private set; }
+
+    public JsEngineOptions EnableConsole()
+    {
+        ConsoleEnabled = true;
         return this;
     }
 

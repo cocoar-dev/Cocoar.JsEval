@@ -42,6 +42,80 @@ public sealed class JsEvalBuilder
     }
 
     /// <summary>
+    /// Enable the <c>NewObject(typeName, args)</c> JS global. Off by default for
+    /// security — combined with the assembly-walking <c>FindType</c> fallback,
+    /// it would otherwise expose construction of any public CLR type. When enabled
+    /// without <see cref="EnableNewObjectAssemblyFallback"/>, only types registered
+    /// via <see cref="AddTypeAlias{T}(string)"/> resolve.
+    /// </summary>
+    public JsEvalBuilder EnableNewObject()
+    {
+        Options.EnableNewObject();
+        return this;
+    }
+
+    /// <summary>
+    /// Allow <c>NewObject(typeName)</c> to resolve unknown names against the
+    /// given assemblies' public types. Off by default — without this opt-in,
+    /// <c>NewObject</c> returns <c>null</c> for any name not in
+    /// <see cref="AddTypeAlias{T}(string)"/>. Multiple calls accumulate.
+    /// Has no effect unless <see cref="EnableNewObject"/> is also called.
+    /// </summary>
+    public JsEvalBuilder EnableNewObjectAssemblyFallback(params Assembly[] assemblies)
+    {
+        Options.EnableNewObjectAssemblyFallback(assemblies);
+        return this;
+    }
+
+    /// <summary>
+    /// Enable the <c>require(name)</c> JS global for runtime module loading.
+    /// Off by default — prefer ES <c>import</c> via <c>ExecuteAsync</c>.
+    /// </summary>
+    public JsEvalBuilder EnableRequire()
+    {
+        Options.EnableRequire();
+        return this;
+    }
+
+    /// <summary>
+    /// Enable the <c>setTimeout</c>/<c>setInterval</c>/<c>clearTimeout</c>/
+    /// <c>clearInterval</c> JS globals. Off by default — async callbacks outlive
+    /// the script's evaluation and run on <see cref="System.Threading.Tasks.TaskScheduler.Default"/>,
+    /// which can cause unbounded background work in low-trust scenarios.
+    /// </summary>
+    public JsEvalBuilder EnableTimers()
+    {
+        Options.EnableTimers();
+        return this;
+    }
+
+    /// <summary>
+    /// Enable the <c>console.log/info/warn/error/debug</c> bridge that forwards
+    /// to the host's <see cref="Microsoft.Extensions.Logging.ILogger"/>. Off by
+    /// default — a malicious or buggy script could otherwise flood the host's
+    /// centralised logging infrastructure.
+    /// </summary>
+    public JsEvalBuilder EnableConsole()
+    {
+        Options.EnableConsole();
+        return this;
+    }
+
+    /// <inheritdoc cref="JsEngineOptions.WithExecutionTimeout(TimeSpan)"/>
+    public JsEvalBuilder WithExecutionTimeout(TimeSpan timeout)
+    {
+        Options.WithExecutionTimeout(timeout);
+        return this;
+    }
+
+    /// <inheritdoc cref="JsEngineOptions.WithMaxStatements(int)"/>
+    public JsEvalBuilder WithMaxStatements(int maxStatements)
+    {
+        Options.WithMaxStatements(maxStatements);
+        return this;
+    }
+
+    /// <summary>
     /// Registers a callback invoked after the underlying Jint engine is created.
     /// Used by add-on packages to register their globals.
     /// </summary>

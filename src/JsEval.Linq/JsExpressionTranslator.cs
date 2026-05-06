@@ -88,6 +88,12 @@ public static class JsExpressionTranslator
         public readonly TranslationOptions Options;
         public readonly List<ParameterExpression> ParamStack = new();
 
+        // Current AST recursion depth — incremented on entry to Visit/VisitChainElement,
+        // decremented on exit. Exceeding Options.MaxAstDepth raises a controlled
+        // InvalidOperationException instead of letting the .NET stack overflow
+        // (StackOverflowException is fatal and would kill the host process).
+        public int Depth;
+
         // Active narrowing frames per parameter, pushed/popped around AND right-hand sides.
         // Each frame is the set of concrete types the parameter may be (from TypeIs nodes
         // collected from the AND's left operand, across both AND and OR sub-trees).
@@ -170,24 +176,36 @@ public static class JsExpressionTranslator
         _ => throw new NotSupportedException($"Body shape {decl.Body.GetType().Name} not supported")
     };
 
-    private static LinqExpr Visit(AstExpr node, Context ctx) => node switch
+    private static LinqExpr Visit(AstExpr node, Context ctx)
     {
-        Identifier id                  => VisitIdentifier(id, ctx),
-        AstMember me                   => VisitMember(me, ctx),
-        CallExpression ce              => VisitCall(ce, ctx),
-        ChainExpression ch             => VisitChain(ch, ctx),
-        StringLiteral sl               => LinqExpr.Constant(sl.Value),
-        NumericLiteral nl              => LinqExpr.Constant(nl.Value),
-        BooleanLiteral bl              => LinqExpr.Constant(bl.Value),
-        NullLiteral                    => LinqExpr.Constant(null),
-        NonLogicalBinaryExpression nbe => VisitBinary(nbe, ctx),
-        LogicalExpression le           => VisitLogical(le, ctx),
-        AstUnary ue             => VisitUnary(ue, ctx),
-        AstConditional cond     => VisitConditional(cond, ctx),
-        ArrowFunctionExpression        => throw new InvalidOperationException(
-            "ArrowFunctionExpression must be visited inside a method call"),
-        _ => throw new NotSupportedException($"AST node {node.GetType().Name} not supported")
-    };
+        if (++ctx.Depth > ctx.Options.MaxAstDepth)
+            throw new InvalidOperationException(
+                $"AST depth exceeded MaxAstDepth ({ctx.Options.MaxAstDepth}). " +
+                "Refactor the script to use intermediate variables or shorter chains, " +
+                "or raise TranslationOptions.MaxAstDepth if you need deeper trees.");
+        try
+        {
+            return node switch
+            {
+                Identifier id                  => VisitIdentifier(id, ctx),
+                AstMember me                   => VisitMember(me, ctx),
+                CallExpression ce              => VisitCall(ce, ctx),
+                ChainExpression ch             => VisitChain(ch, ctx),
+                StringLiteral sl               => LinqExpr.Constant(sl.Value),
+                NumericLiteral nl              => LinqExpr.Constant(nl.Value),
+                BooleanLiteral bl              => LinqExpr.Constant(bl.Value),
+                NullLiteral                    => LinqExpr.Constant(null),
+                NonLogicalBinaryExpression nbe => VisitBinary(nbe, ctx),
+                LogicalExpression le           => VisitLogical(le, ctx),
+                AstUnary ue             => VisitUnary(ue, ctx),
+                AstConditional cond     => VisitConditional(cond, ctx),
+                ArrowFunctionExpression        => throw new InvalidOperationException(
+                    "ArrowFunctionExpression must be visited inside a method call"),
+                _ => throw new NotSupportedException($"AST node {node.GetType().Name} not supported")
+            };
+        }
+        finally { ctx.Depth--; }
+    }
 
     private static LinqExpr VisitIdentifier(Identifier id, Context ctx)
     {
@@ -371,6 +389,20 @@ public static class JsExpressionTranslator
     }
 
     private static LinqExpr VisitChainElement(AstExpr node, Context ctx, List<LinqExpr> guards)
+    {
+        if (++ctx.Depth > ctx.Options.MaxAstDepth)
+            throw new InvalidOperationException(
+                $"AST depth exceeded MaxAstDepth ({ctx.Options.MaxAstDepth}) inside an optional chain. " +
+                "Refactor the script to use intermediate variables, " +
+                "or raise TranslationOptions.MaxAstDepth if you need deeper trees.");
+        try
+        {
+            return VisitChainElementCore(node, ctx, guards);
+        }
+        finally { ctx.Depth--; }
+    }
+
+    private static LinqExpr VisitChainElementCore(AstExpr node, Context ctx, List<LinqExpr> guards)
     {
         switch (node)
         {

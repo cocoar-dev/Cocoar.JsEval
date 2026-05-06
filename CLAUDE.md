@@ -75,7 +75,13 @@ services.AddJsEval(b => b
 
 ### Built-in JS Globals
 
-`console`, `setTimeout`/`setInterval`, `structuredClone`, `atob`/`btoa`, `performance.now()`, `TextEncoder`/`TextDecoder`, `exit()`, `NewObject()`, `require()`. All provided by JsEval — Jint has none of these natively.
+**Always-on (safe primitives):** `structuredClone`, `atob`/`btoa`, `performance.now()`, `TextEncoder`/`TextDecoder`. `Type.*` is on whenever `AddDiscriminatorMappings` / `AddTypeAlias` is configured.
+
+**Opt-in via builder flag (4.0+):** `console.*` (`EnableConsole`), `setTimeout`/`setInterval`/`clearTimeout`/`clearInterval` (`EnableTimers`), `NewObject` (`EnableNewObject` + optional `EnableNewObjectAssemblyFallback`), `require` (`EnableRequire`), `fetch` (`EnableFetch`).
+
+**Removed in 4.0:** `exit()` (use IIFE for early-return). See `SECURITY.md` for the threat model.
+
+Jint provides none of these natively — they are all set up by `JsEngine.Initialize`.
 
 ## Solution
 

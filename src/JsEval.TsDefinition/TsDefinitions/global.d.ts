@@ -1,5 +1,3 @@
-declare function exit(): void;
-
 declare function NewObject<T>(typeName: string, ...args: any[]): T;
 
 declare function require(moduleName: string): any;

@@ -56,4 +56,15 @@ public sealed class TranslationOptions
     /// </code>
     /// </summary>
     public IReadOnlyList<(string Source, string Target)> NamespaceMappings { get; init; } = [];
+
+    /// <summary>
+    /// Maximum AST recursion depth before the translator aborts with
+    /// <see cref="InvalidOperationException"/>. Guards against
+    /// <see cref="StackOverflowException"/> on deeply nested scripts (e.g. long
+    /// ternary chains or logical expressions), which is unrecoverable in .NET
+    /// and would crash the host process. Default: <c>256</c> — comfortably above
+    /// any hand-written predicate (typical depth &lt; 10) but well below the
+    /// default thread stack's recursion limit for <c>Visit</c>-class frames.
+    /// </summary>
+    public int MaxAstDepth { get; init; } = 256;
 }

@@ -38,13 +38,24 @@ services.AddJsEval(b => b
 | Method | Description |
 |--------|-------------|
 | `EnableFetch()` | Enable the browser-compatible `fetch()` global |
+| `EnableConsole()` | Enable the `console.log/info/warn/error/debug` → `ILogger` bridge |
+| `EnableTimers()` | Enable `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` |
+| `EnableNewObject()` | Enable the `NewObject(typeName, args)` JS global (alias-only by default) |
+| `EnableNewObjectAssemblyFallback(params Assembly[])` | Allowlist for `NewObject`'s `FindType` fallback. Additive — multiple calls accumulate |
+| `EnableRequire()` | Enable the `require(name)` JS global for runtime module loading |
 | `EnableDebugMode()` | Enable Jint debug mode (opt-in, not enabled by default) |
-| `AllowCurrentDomainAssemblies()` | Allow access to all loaded CLR assemblies |
-| `AllowAssemblies(params Assembly[])` | Allow access to specific CLR assemblies |
+| `WithExecutionTimeout(TimeSpan)` | Wall-clock cap per execution (default `10 s`; pass `Timeout.InfiniteTimeSpan` to disable) |
+| `WithMaxStatements(int)` | Statement-count cap per execution (default `5 000 000`; pass `0` to disable) |
+| `AllowCurrentDomainAssemblies()` | Allow Jint's direct CLR access for all loaded assemblies (orthogonal to `EnableNewObject`) |
+| `AllowAssemblies(params Assembly[])` | Allow Jint's direct CLR access for specific assemblies |
 | `AddExtensionMethods<T>()` | Register extension methods from a type |
 | `AddExtensionMethods(params Type[])` | Register extension methods from types |
 | `AddModule<T>()` | Register a module for use in scripts |
 | `AddDiscriminatorMappings<TBase>(...)` | Register polymorphic type checks — exposes `Type.Is(a, 'dog')` as a JS global |
+
+::: tip Security defaults (4.0)
+Unsafe-by-default JS globals (`NewObject`, `require`, `setTimeout`, `setInterval`, `console`) are off by default. Enable only what your scripts need; `exit()` was removed entirely. See [SECURITY.md](https://github.com/cocoar/cocoar.js-eval/blob/develop/SECURITY.md).
+:::
 
 ## Execution Methods
 
@@ -241,28 +252,44 @@ No configuration needed -- TaskInterop is enabled by default.
 
 ## CLR Interop
 
-Create .NET objects from JavaScript using `NewObject`:
+Create .NET objects from JavaScript using `NewObject` (opt-in — see [Built-in Globals](#built-in-globals) below):
+
+```csharp
+services.AddJsEval(b => b
+    .EnableNewObject()
+    .EnableNewObjectAssemblyFallback(typeof(MyDomainType).Assembly));
+```
 
 ```javascript
-const dt = NewObject('System.DateTime', [2025, 1, 15]);
+const dt = NewObject('MyDomainType');
 ```
 
 ## Built-in Globals
 
-| Function | Description |
-|----------|-------------|
-| `fetch(url, options?)` | Browser-compatible HTTP client (opt-in via `EnableFetch()`) |
-| `fetchOptions` | Optional fetch configuration (TLS, timeout, proxy) |
-| `console.log/info/warn/error/debug` | Logging via `ILogger` from the DI container |
-| `setTimeout(fn, ms)` | Schedule a callback after a delay |
-| `setInterval(fn, ms)` | Schedule a recurring callback |
-| `clearTimeout(id)` | Cancel a timeout |
-| `clearInterval(id)` | Cancel an interval |
-| `structuredClone(value)` | Deep clone a value |
-| `exit()` | Cancels script execution |
-| `NewObject(typeName, args)` | Creates a .NET object instance |
-| `require(moduleName)` | Loads a registered JsEval module |
-| `Type.Is(value, discriminator)` | Polymorphic type check — available when `AddDiscriminatorMappings` is configured |
+Since 4.0 most globals that touch host primitives are **off by default** for security. Enable them explicitly via the corresponding builder flag — see [SECURITY.md](https://github.com/cocoar/cocoar.js-eval/blob/develop/SECURITY.md) for the threat model.
+
+| Function | Default | Enable via |
+|----------|---------|------------|
+| `btoa` / `atob` | always on | — |
+| `performance.now()` | always on | — |
+| `TextEncoder` / `TextDecoder` | always on | — |
+| `structuredClone(value)` | always on | — |
+| `Type.Is(value, discriminator)` | always on (when configured) | `AddDiscriminatorMappings` |
+| `fetch(url, options?)` | off | `EnableFetch()` |
+| `console.log/info/warn/error/debug` | off | `EnableConsole()` |
+| `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` | off | `EnableTimers()` |
+| `NewObject(typeName, args)` | off | `EnableNewObject()` (alias-only) + `EnableNewObjectAssemblyFallback(...)` for unknown types |
+| `require(moduleName)` | off | `EnableRequire()` |
+
+**`exit()` was removed in 4.0.** It cancelled the engine's CTS and left the engine permanently dead. Use an IIFE for early-return:
+
+```javascript
+(() => {
+    if (cond) return earlyResult;
+    // …
+    return finalResult;
+})()
+```
 
 ### console
 

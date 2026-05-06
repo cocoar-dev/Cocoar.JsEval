@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.0.0] — Security hardening: minimal-mode defaults
+
+**Breaking.** Unsafe-by-default JS globals are now off by default. See [SECURITY.md](SECURITY.md) for the threat model.
+
+### Added
+
+- **Opt-in builder flags** for previously-default globals: `EnableNewObject()`, `EnableRequire()`, `EnableTimers()`, `EnableConsole()`. Symmetrical with the existing `EnableFetch()` / `EnableDebugMode()`.
+- **`EnableNewObjectAssemblyFallback(params Assembly[])`** — explicit allowlist for the `NewObject` `FindType` fallback. Additive across calls. Without it, `NewObject` is alias-only.
+- **`WithExecutionTimeout(TimeSpan)`** and **`WithMaxStatements(int)`** on the builder. Defense-in-depth defaults: 10 s / 5 000 000. Pass `Timeout.InfiniteTimeSpan` / `0` to disable.
+- **`TranslationOptions.MaxAstDepth`** (default 256) on `JsExpressionTranslator` — depth guard that prevents host-crashing `StackOverflowException` on deeply nested scripts.
+
+### Changed
+
+- **`GetValue<T>`** preserves reference identity for non-primitive types (`IQueryable<T>`, custom classes set via `SetValue`) instead of routing through a JSON round-trip.
+- **`ExecuteAsync` exception filter:** `Stop()`-driven cancellation stays silent; timeouts (`TimeoutException`) propagate.
+
+### Removed
+
+- **`exit()` JS global** — left the engine permanently dead. Use an IIFE for early-return: `(() => { if (cond) return early; … })()`.
+- **`NewObject` AppDomain-wide assembly walk** via `Cocoar.Reflectensions.TypeHelper.FindType` is gone. Resolution is now strictly `TypeAliases ∪ EnableNewObjectAssemblyFallback` assemblies.
+
+### Migration
+
+```csharp
+// Before (5.x — implicit defaults)
+services.AddJsEval();
+
+// After (4.0 — explicit opt-in for what your scripts actually need)
+services.AddJsEval(b => b
+    .EnableNewObject()
+    .EnableNewObjectAssemblyFallback(typeof(MyDomainType).Assembly)
+    .EnableConsole()
+    .EnableTimers()
+    .EnableRequire());
+```
+
+For DB-stored scripts that called `exit()`, rewrite to an IIFE:
+
+```javascript
+// Before:  if (cond) exit();   later code…
+// After:
+(() => {
+    if (cond) return;
+    // later code…
+})();
+```
+
 ## [3.3.0]
 
 ### Added

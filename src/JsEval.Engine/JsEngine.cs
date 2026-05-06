@@ -97,34 +97,58 @@ var console = {
     }
 
     /// <summary>
-    /// Resolve a NewObject(name, ...) call. First consults
-    /// <see cref="JsEngineOptions.TypeAliases"/> for user-registered short names;
-    /// if not found, falls back to the legacy <see cref="TypeHelper.CreateObject"/>
-    /// path (which still handles TypeScript-specific aliases like "date" →
-    /// System.DateTime and assembly-qualified lookups).
+    /// Resolve a NewObject(name, ...) call. Consults
+    /// <see cref="JsEngineOptions.TypeAliases"/> first; on miss, falls through
+    /// to the assembly allowlist registered via
+    /// <see cref="JsEngineOptions.EnableNewObjectAssemblyFallback(Assembly[])"/>.
+    /// Returns <c>null</c> when neither path resolves the name — never walks
+    /// <see cref="AppDomain.CurrentDomain"/> assemblies (the pre-4.0 default
+    /// that exposed any public CLR type with a public ctor).
     /// </summary>
     private object? ResolveAndCreate(string typeName, object[] parameters)
     {
-        if (!string.IsNullOrEmpty(typeName) && Options.TypeAliases.TryGetValue(typeName, out var aliasedType))
-        {
-            parameters ??= Array.Empty<object>();
+        if (string.IsNullOrEmpty(typeName)) return null;
+        parameters ??= Array.Empty<object>();
+
+        if (Options.TypeAliases.TryGetValue(typeName, out var aliasedType))
             return parameters.Length > 0
                 ? Activator.CreateInstance(aliasedType, parameters)
                 : Activator.CreateInstance(aliasedType);
+
+        if (Options.NewObjectAssemblyFallback.Count == 0) return null;
+
+        foreach (var asm in Options.NewObjectAssemblyFallback)
+        {
+            var resolved = asm.GetType(typeName, throwOnError: false);
+            if (resolved is not null)
+                return parameters.Length > 0
+                    ? Activator.CreateInstance(resolved, parameters)
+                    : Activator.CreateInstance(resolved);
         }
-        return TypeHelper.CreateObject(typeName, parameters);
+        return null;
     }
 
     private void Initialize()
     {
-        _engine.SetValue("exit", new Action(Stop));
-        _engine.SetValue("NewObject", new Func<string, object[], object?>(ResolveAndCreate));
-        _engine.SetValue("require", new Func<string, JsValue>(Require));
+        // Unsafe-by-default globals are gated behind explicit opt-in flags as
+        // of 4.0 — see SECURITY.md. exit() is removed entirely (it cancelled
+        // the engine's CTS, leaving the engine permanently dead — use
+        // `(() => { if (cond) return early; ... })()` for early-return).
+        if (Options.NewObjectEnabled)
+            _engine.SetValue("NewObject", new Func<string, object[], object?>(ResolveAndCreate));
 
-        RegisterConsole();
-        RegisterTimers();
+        if (Options.RequireEnabled)
+            _engine.SetValue("require", new Func<string, JsValue>(Require));
+
+        if (Options.ConsoleEnabled)
+            RegisterConsole();
+
+        if (Options.TimersEnabled)
+            RegisterTimers();
+
+        // Always-on safe primitives: btoa/atob, performance, TextEncoder/Decoder,
+        // structuredClone — pure conversion helpers with no side-effects.
         RegisterWebApis();
-
         _engine.Execute(StructuredCloneScript);
 
         if (Options.FetchEnabled)
@@ -376,9 +400,11 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
         {
             await _engine.EvaluateAsync(script, cancellationToken: _cancellationTokenSource.Token);
         }
-        catch (ExecutionCanceledException)
+        catch (ExecutionCanceledException) when (_cancellationTokenSource.IsCancellationRequested)
         {
-            // Script was cancelled via Stop()
+            // Script was cancelled via Stop() — silent. Timeout-driven
+            // cancellations (TimeoutInterval) propagate so the consumer can
+            // observe the failure.
         }
         catch (Exception exception)
         {
@@ -428,9 +454,11 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
                 _mainModule = _engine.Modules.Import(moduleName);
             }
         }
-        catch (ExecutionCanceledException)
+        catch (ExecutionCanceledException) when (_cancellationTokenSource.IsCancellationRequested)
         {
-            // Script was cancelled via Stop()
+            // Script was cancelled via Stop() — silent. Timeout-driven
+            // cancellations (TimeoutInterval) propagate so the consumer can
+            // observe the failure.
         }
         catch (Exception exception)
         {
@@ -471,9 +499,11 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
                 cancellationToken: _cancellationTokenSource.Token);
             _mainModule = result.AsObject();
         }
-        catch (ExecutionCanceledException)
+        catch (ExecutionCanceledException) when (_cancellationTokenSource.IsCancellationRequested)
         {
-            // Script was cancelled via Stop()
+            // Script was cancelled via Stop() — silent. Timeout-driven
+            // cancellations (TimeoutInterval) propagate so the consumer can
+            // observe the failure.
         }
         catch (Exception exception)
         {

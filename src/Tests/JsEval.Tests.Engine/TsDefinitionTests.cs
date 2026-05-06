@@ -212,8 +212,10 @@ public class TsDefinitionTests
         Assert.Contains("fetch", global);
         Assert.Contains("fetchOptions", global);
         Assert.Contains("NewObject", global);
-        Assert.Contains("exit", global);
         Assert.Contains("require", global);
+        // exit() removed in 4.0 — see SECURITY.md (no replacement; use IIFE
+        // for early-return: `(() => { if (cond) return early; ... })()`).
+        Assert.DoesNotContain("function exit(", global);
     }
 
     // The package no longer ships its own lib.*.d.ts files. Monaco's TypeScript
@@ -528,7 +530,9 @@ public class TsDefinitionTests
     public void AddTypeAlias_NewObjectResolvesShortName()
     {
         var sc = new ServiceCollection();
-        sc.AddJsEval(b => b.AddTypeAlias<FirstHolder>("FirstHolder"));
+        sc.AddJsEval(b => b
+            .EnableNewObject()
+            .AddTypeAlias<FirstHolder>("FirstHolder"));
         using var sp = sc.BuildServiceProvider();
 
         using var scope = sp.CreateScope();
