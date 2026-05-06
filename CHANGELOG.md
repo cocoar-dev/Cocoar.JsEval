@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - **`EnableNewObjectAssemblyFallback(params Assembly[])`** — explicit allowlist for the `NewObject` `FindType` fallback. Additive across calls. Without it, `NewObject` is alias-only.
 - **`WithExecutionTimeout(TimeSpan)`** and **`WithMaxStatements(int)`** on the builder. Defense-in-depth defaults: 10 s / 5 000 000. Pass `Timeout.InfiniteTimeSpan` / `0` to disable.
 - **`TranslationOptions.MaxAstDepth`** (default 256) on `JsExpressionTranslator` — depth guard that prevents host-crashing `StackOverflowException` on deeply nested scripts.
+- **`TsTranspiler.MaxParseDepth`** (default 128) — pre-parse paren/bracket/brace depth scan that rejects deeply nested input with a controlled `TsTranspileException` before it can crash the host process. The TypeScript compiler runs as JavaScript inside Jint, which amplifies stack cost ~10× and exhausts the .NET stack at ~300 levels — long before Acornima's own 5000-cap engages.
 
 ### Changed
 

@@ -37,6 +37,10 @@ var result = engine.GetValue<string>("result"); // "Hello 42"
 `TsTranspiler` is registered as a singleton. The embedded TypeScript compiler is loaded once and reused across all transpilation calls.
 :::
 
+::: warning Depth cap (4.0)
+`Transpile` rejects source whose paren/bracket/brace nesting exceeds `TsTranspiler.MaxParseDepth` (default 128) with a `TsTranspileException`. Deeply nested input (~300+ levels) would otherwise exhaust the .NET stack — the embedded TS compiler runs as JavaScript inside Jint, which amplifies stack cost ~10× and triggers a host-process crash that no `try`/`catch` can recover. Typical predicates have depth < 10; raise the cap only if you have a legitimate use case for deeper trees.
+:::
+
 ## Supported TypeScript Features
 
 The embedded TypeScript 6.0 compiler supports all standard TypeScript features:

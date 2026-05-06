@@ -21,6 +21,7 @@ Defense-in-depth guards are on by default:
 - **Execution timeout** — 10 s wall-clock per call (`WithExecutionTimeout`). Surfaces as `System.TimeoutException`.
 - **Statement count cap** — 5 000 000 statements per call (`WithMaxStatements`). Surfaces as `Jint.Runtime.StatementsCountOverflowException`.
 - **Translator depth cap** — 256-deep AST recursion in `JsExpressionTranslator` (`TranslationOptions.MaxAstDepth`). Throws `InvalidOperationException` instead of letting the host process crash with `StackOverflowException`.
+- **TS-transpiler depth scan** — pre-parse paren/bracket/brace scan in `TsTranspiler` (`TsTranspiler.MaxParseDepth`, default 128). Rejects deeply nested input with a controlled `TsTranspileException` before the embedded TypeScript compiler (running as JavaScript inside Jint) can exhaust the .NET stack at ~300 levels.
 
 There is **no sandbox isolation at the OS level**. The library cannot defend against vulnerabilities in Jint itself, in the host's allowlisted assemblies, or in code that the consumer chooses to expose via `EnableNewObjectAssemblyFallback`. Treat the library as a hardening layer, not a sandbox replacement.
 

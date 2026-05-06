@@ -35,20 +35,39 @@ public sealed class TsTranspiler
     private static readonly Regex SourceMappingUrlComment = new(@"^\s*//# sourceMappingURL=.*$", RegexOptions.Compiled | RegexOptions.Multiline);
 
     /// <summary>
+    /// Maximum nesting depth (parens, brackets, braces) the source may contain
+    /// before <see cref="Transpile"/> rejects it with a <see cref="TsTranspileException"/>.
+    /// Default: <c>128</c>.
+    /// <para>
+    /// The TypeScript compiler runs as JavaScript interpreted by Jint;
+    /// JS-level recursion costs roughly 10× more .NET stack frames than direct
+    /// .NET recursion, so deeply nested input (e.g. 300+ chained ternaries)
+    /// exhausts the thread stack and crashes the host process with an
+    /// unrecoverable <see cref="StackOverflowException"/>. The pre-parse depth
+    /// scan rejects such input with a controlled exception instead.
+    /// </para>
+    /// <para>
+    /// 128 sits well above any hand-written predicate (typical depth &lt; 10)
+    /// and ~2.3× below the empirical SOE threshold (~300). Bump only if you
+    /// have a legitimate use case for deeper nesting and run on a sufficiently
+    /// large stack.
+    /// </para>
+    /// </summary>
+    public int MaxParseDepth { get; init; } = 128;
+
+    /// <summary>
     /// Transpile TypeScript source code to JavaScript.
     ///
     /// Throws <see cref="TsTranspileException"/> if the TypeScript compiler
-    /// reports any error. Non-error diagnostics are dropped; use
+    /// reports any error, or if the source's nesting depth exceeds
+    /// <see cref="MaxParseDepth"/>. Non-error diagnostics are dropped; use
     /// <see cref="TranspileWithSourceMap"/> if you need them.
     /// </summary>
-    // CA1822: kept as instance methods — public API; callers hold TsTranspiler instances
-    // (e.g., pooling wrappers and existing test code). Making them static is a source-breaking
-    // change because C# does not allow calling static members through instance references.
-#pragma warning disable CA1822
     public string Transpile(string sourceCode)
     {
         if (string.IsNullOrWhiteSpace(sourceCode))
             return "";
+        EnforceMaxParseDepth(sourceCode);
         var (js, _, _) = TranspileCore(sourceCode, emitSourceMap: false);
         return js;
     }
@@ -59,16 +78,102 @@ public sealed class TsTranspiler
     /// (warnings / suggestions / messages).
     ///
     /// Throws <see cref="TsTranspileException"/> on any error-category
-    /// diagnostic — the same error contract as <see cref="Transpile(string)"/>.
+    /// diagnostic, or if the source's nesting depth exceeds
+    /// <see cref="MaxParseDepth"/> — same error contract as
+    /// <see cref="Transpile(string)"/>.
     /// </summary>
     public TsTranspileResult TranspileWithSourceMap(string sourceCode)
     {
         if (string.IsNullOrWhiteSpace(sourceCode))
             return new TsTranspileResult("", "", []);
+        EnforceMaxParseDepth(sourceCode);
         var (js, map, warnings) = TranspileCore(sourceCode, emitSourceMap: true);
         return new TsTranspileResult(js, map ?? "", warnings);
     }
-#pragma warning restore CA1822
+
+    private void EnforceMaxParseDepth(string sourceCode)
+    {
+        var depth = MeasureMaxNestingDepth(sourceCode);
+        if (depth > MaxParseDepth)
+        {
+            var diag = new TsDiagnostic(
+                TsDiagnosticCategory.Error,
+                Code: 0,
+                Message: $"Source nesting depth ({depth}) exceeds MaxParseDepth ({MaxParseDepth}). " +
+                         "Refactor the script to use intermediate variables or shorter chains, " +
+                         "or raise TsTranspiler.MaxParseDepth if you need deeper trees.",
+                Line: 1,
+                Column: 1);
+            throw new TsTranspileException([diag]);
+        }
+    }
+
+    /// <summary>
+    /// Walks <paramref name="source"/> counting unmatched <c>(</c>, <c>[</c>,
+    /// <c>{</c> opens and returns the maximum depth observed. Skips contents of
+    /// single-quoted, double-quoted, and backtick string literals; skips line
+    /// (<c>// …</c>) and block (<c>/* … */</c>) comments. The scan is deliberately
+    /// simple — it does not parse template-literal <c>${…}</c> interpolations
+    /// specially (their bracket counts are skipped along with the surrounding
+    /// string), and it does not distinguish regex literals from division.
+    /// Both omissions undercount slightly, which is the safe direction:
+    /// legitimate scripts are not falsely rejected, and the deep-nesting attack
+    /// vector (raw <c>(((…)))</c> chains) is not concealed by these omissions.
+    /// </summary>
+    internal static int MeasureMaxNestingDepth(string source)
+    {
+        int depth = 0, max = 0, len = source.Length;
+        for (int i = 0; i < len;)
+        {
+            var c = source[i];
+
+            // Comments
+            if (c == '/' && i + 1 < len)
+            {
+                var next = source[i + 1];
+                if (next == '/')
+                {
+                    i += 2;
+                    while (i < len && source[i] != '\n') i++;
+                    continue;
+                }
+                if (next == '*')
+                {
+                    i += 2;
+                    while (i + 1 < len && !(source[i] == '*' && source[i + 1] == '/')) i++;
+                    i = i + 1 < len ? i + 2 : len;
+                    continue;
+                }
+            }
+
+            // String literals — single, double, backtick. Honour backslash-escapes.
+            if (c == '\'' || c == '"' || c == '`')
+            {
+                var quote = c;
+                i++;
+                while (i < len && source[i] != quote)
+                {
+                    if (source[i] == '\\' && i + 1 < len) { i += 2; continue; }
+                    i++;
+                }
+                if (i < len) i++; // consume closing quote
+                continue;
+            }
+
+            switch (c)
+            {
+                case '(' or '[' or '{':
+                    depth++;
+                    if (depth > max) max = depth;
+                    break;
+                case ')' or ']' or '}':
+                    if (depth > 0) depth--;
+                    break;
+            }
+            i++;
+        }
+        return max;
+    }
 
     private static (string Js, string? SourceMap, IReadOnlyList<TsDiagnostic> Warnings) TranspileCore(
         string sourceCode, bool emitSourceMap)
