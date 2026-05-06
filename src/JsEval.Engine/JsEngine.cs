@@ -285,19 +285,26 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
     public string GetValueAsJson(string name) =>
         _jsonSerializer.Serialize(InternalGetValue(name)).AsString();
 
-    public T? GetValue<T>(string name)
+    public T? GetValue<T>(string name) => ConvertJsValue<T>(InternalGetValue(name));
+
+    private T? ConvertJsValue<T>(JsValue jsValue)
     {
-        var jsValue = InternalGetValue(name);
+        if (jsValue.IsUndefined() || jsValue.IsNull()) return default;
 
-        // Fast path: extract primitives directly from JsValue — no JSON round-trip
+        // Fast path: primitives — no JSON round-trip
         if (typeof(T) == typeof(string)) return (T)(object)jsValue.AsString();
-        if (typeof(T) == typeof(int)) return (T)(object)(int)jsValue.AsNumber();
+        if (typeof(T) == typeof(int))    return (T)(object)(int)jsValue.AsNumber();
         if (typeof(T) == typeof(double)) return (T)(object)jsValue.AsNumber();
-        if (typeof(T) == typeof(bool)) return (T)(object)jsValue.AsBoolean();
-        if (typeof(T) == typeof(long)) return (T)(object)(long)jsValue.AsNumber();
-        if (typeof(T) == typeof(float)) return (T)(object)(float)jsValue.AsNumber();
+        if (typeof(T) == typeof(bool))   return (T)(object)jsValue.AsBoolean();
+        if (typeof(T) == typeof(long))   return (T)(object)(long)jsValue.AsNumber();
+        if (typeof(T) == typeof(float))  return (T)(object)(float)jsValue.AsNumber();
 
-        // Complex types: fall back to JSON serialization
+        // Reference types: ToObject() preserves the original .NET reference
+        // (e.g. IQueryable<T>, custom classes set via SetValue).
+        // Only fall back to JSON for value types that ToObject() can't produce directly.
+        var obj = jsValue.ToObject();
+        if (obj is T typed) return typed;
+
         return JsonHelper.ToObject<T>(_jsonSerializer.Serialize(jsValue).AsString());
     }
 
