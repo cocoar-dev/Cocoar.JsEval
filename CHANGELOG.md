@@ -2,9 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [4.1.0] — Constructor-pure JsEngine (Wolverine codegen / static-analysis friendly)
+## [4.1.0] — Constructor-pure JsEngine (Wolverine 6 / static-analysis friendly)
 
-`JsEngine` no longer takes `IServiceProvider` directly. The service-locator pattern required for module activation has been isolated behind a new `IJsModuleBuilder` service, so downstream codegen (Wolverine, AOT analyzers) sees only typed dependencies on the engine itself. Consumers using `services.AddJsEval(...)` are unaffected.
+`JsEngine` no longer takes `IServiceProvider` directly, and `AddJsEval` now registers both `JsEngine` and `IJsModuleBuilder` **type-based** rather than via opaque lambda factories. Apps on Wolverine 6's strict `ServiceLocationPolicy.NotAllowed` default can inject `JsEngine` into handlers without per-app `AlwaysUseServiceLocationFor<T>` allowlist entries. Consumers using `services.AddJsEval(...)` are unaffected.
 
 ### Added
 
@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 
 - **`JsEngine` constructor** is now `JsEngine(IJsModuleRegistry, IJsModuleBuilder, JsEngineOptions, ILogger<JsEngine>?)` — no more `IServiceProvider`. Only direct `new JsEngine(...)` callers need to update.
 - **`IJsModuleRegistry`** reduced to `GetRegisteredModuleDefinitions()`. The `BuildModuleInstance` / `BuildSingleModuleInstance` methods moved to `IJsModuleBuilder`. `TsDefinitionService` and other registry consumers are unchanged.
+- **DI registration in `AddJsEval`** switched from lambda-factory closures to type-based registration (`AddScoped<JsEngine>()`, `TryAddScoped<IJsModuleBuilder, JsModuleBuilder>()`). Wolverine 6's strict codegen rejects opaque `ImplementationFactory` closures regardless of how clean the underlying ctor is — type-based registration lets the static analyzer walk the ctor like any other service.
 
 ### Migration (only for direct ctor users)
 

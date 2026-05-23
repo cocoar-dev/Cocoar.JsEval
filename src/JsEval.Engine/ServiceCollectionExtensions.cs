@@ -44,19 +44,21 @@ public static class ServiceCollectionExtensions
         // IJsModuleBuilder owns the IServiceProvider-based module activation —
         // keeping it off JsEngine's ctor means downstream codegen (Wolverine,
         // AOT analyzers) sees only typed dependencies on the engine itself.
-        services.TryAddScoped<IJsModuleBuilder>(sp => new JsModuleBuilder(
-            sp,
-            sp.GetRequiredService<IJsModuleRegistry>()));
+        // Registered type-based (not via lambda factory) so Wolverine 6's
+        // strict ServiceLocationPolicy.NotAllowed can walk the ctor statically
+        // — opaque-factory closures fail that check regardless of how clean
+        // the ctor signature is.
+        services.TryAddScoped<IJsModuleBuilder, JsModuleBuilder>();
 
         // Scoped, not Transient: Jint engines are not thread-safe, and multiple
         // services resolving JsEngine in the same request should share one engine
         // so globals set via SetValue are visible across them. Consumers that
         // need an isolated engine can construct one explicitly with `new JsEngine(...)`.
-        services.AddScoped<JsEngine>(sp => new JsEngine(
-            sp.GetRequiredService<IJsModuleRegistry>(),
-            sp.GetRequiredService<IJsModuleBuilder>(),
-            sp.GetRequiredService<JsEngineOptions>(),
-            sp.GetService<ILogger<JsEngine>>()));
+        // Type-based registration — see note on IJsModuleBuilder above. The
+        // optional `ILogger<JsEngine>? = null` ctor parameter resolves via
+        // ActivatorUtilities' default-value handling when logging is not
+        // registered.
+        services.AddScoped<JsEngine>();
 
         return services;
     }
