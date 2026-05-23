@@ -2,6 +2,47 @@
 
 All notable changes to this project are documented in this file. For the authoritative source, see [`CHANGELOG.md`](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/CHANGELOG.md) in the repo root.
 
+## [4.1.0] — Constructor-pure JsEngine (Wolverine 6 / static-analysis friendly)
+
+`JsEngine` no longer takes `IServiceProvider` directly, and `AddJsEval` now registers both `JsEngine` and `IJsModuleBuilder` **type-based** rather than via opaque lambda factories. Apps on Wolverine 6's strict `ServiceLocationPolicy.NotAllowed` default can inject `JsEngine` into handlers without per-consumer `AlwaysUseServiceLocationFor<T>` allowlist entries — the single remaining entry needed is `IJsModuleBuilder`. Consumers using `services.AddJsEval(...)` are unaffected.
+
+### Added
+- **`IJsModuleBuilder` / `JsModuleBuilder`** in `Cocoar.JsEval` — owns the `IServiceProvider`-based module activation (constructor-parameter resolution via DI + `ActivatorUtilities`). The single intentional locator boundary in the package; registered scoped by `AddJsEval`.
+
+### Changed
+- **`JsEngine` constructor** — now `JsEngine(IJsModuleRegistry, IJsModuleBuilder, JsEngineOptions, ILogger<JsEngine>?)`. No more `IServiceProvider`. Only direct `new JsEngine(...)` callers need to update.
+- **`IJsModuleRegistry`** reduced to `GetRegisteredModuleDefinitions()`. The `BuildModuleInstance` / `BuildSingleModuleInstance` methods moved to `IJsModuleBuilder`.
+- **DI registration in `AddJsEval`** — switched from lambda-factory closures to type-based registration (`AddScoped<JsEngine>()`, `TryAddScoped<IJsModuleBuilder, JsModuleBuilder>()`). Wolverine 6's strict codegen rejects opaque `ImplementationFactory` closures regardless of how clean the underlying ctor is.
+
+### Migration (only for direct `new JsEngine(...)` callers)
+
+```csharp
+// Before (4.0):
+new JsEngine(serviceProvider, moduleRegistry, options, logger);
+
+// After (4.1):
+new JsEngine(moduleRegistry, new JsModuleBuilder(serviceProvider, moduleRegistry), options, logger);
+```
+
+## [4.0.0] — Security hardening: minimal-mode defaults
+
+**Breaking.** Unsafe-by-default JS globals are now off by default. See [SECURITY.md](https://github.com/cocoar-dev/Cocoar.JsEval/blob/main/SECURITY.md) for the threat model.
+
+### Added
+- **Opt-in builder flags** — `EnableNewObject()`, `EnableRequire()`, `EnableTimers()`, `EnableConsole()`. Symmetrical with the existing `EnableFetch()` / `EnableDebugMode()`.
+- **`EnableNewObjectAssemblyFallback(params Assembly[])`** — explicit allowlist for `NewObject`'s `FindType` fallback. Additive across calls.
+- **`WithExecutionTimeout(TimeSpan)`** + **`WithMaxStatements(int)`** — defense-in-depth defaults: 10 s / 5 000 000.
+- **`TranslationOptions.MaxAstDepth`** (default 256) on `JsExpressionTranslator` — depth guard against host-crashing `StackOverflowException`.
+- **`TsTranspiler.MaxParseDepth`** (default 128) — pre-parse paren/bracket/brace depth scan that rejects deeply nested input with a controlled exception.
+
+### Changed
+- **`GetValue<T>`** preserves reference identity for non-primitive types instead of routing through a JSON round-trip.
+- **`ExecuteAsync` exception filter** — `Stop()`-driven cancellation stays silent; timeouts propagate.
+
+### Removed
+- **`exit()` JS global** — left the engine permanently dead. Use an IIFE for early-return.
+- **`NewObject` AppDomain-wide assembly walk** — resolution is now strictly `TypeAliases ∪ EnableNewObjectAssemblyFallback` assemblies.
+
 ## [3.3.0]
 
 ### Added

@@ -15,9 +15,29 @@ var engine = serviceProvider.GetRequiredService<JsEngine>();
 ```
 
 ::: info DI lifetime: Scoped (since v3.1)
-`AddJsEval` registers `JsEngine` as **scoped**. Multiple services resolving `JsEngine` in the same scope (e.g. one HTTP request) share one engine — globals set via `SetValue` are visible across collaborators, and the "Jint is not thread-safe" contract holds by construction. If you need an isolated engine for a specific job, construct one directly with `new JsEngine(...)`.
+`AddJsEval` registers `JsEngine` as **scoped**. Multiple services resolving `JsEngine` in the same scope (e.g. one HTTP request) share one engine — globals set via `SetValue` are visible across collaborators, and the "Jint is not thread-safe" contract holds by construction. If you need an isolated engine for a specific job, construct one directly with `new JsEngine(...)` (see [v4.1 ctor signature](#wolverine-6-strict-service-location-policy)).
 
 **Migration from v3.0 (transient):** if you relied on each `GetRequiredService<JsEngine>()` producing a fresh instance, either switch to explicit construction or wrap the work in `sp.CreateScope()`.
+:::
+
+::: info Wolverine 6 strict service-location policy
+Since v4.1, `JsEngine` and `IJsModuleBuilder` are both registered **type-based** (not via lambda factories), so apps running Wolverine 6's strict `ServiceLocationPolicy.NotAllowed` default can inject `JsEngine` into handlers without per-consumer allowlist entries. The single remaining allowlist entry needed is for `IJsModuleBuilder` — it's the intentional locator boundary that activates modules with arbitrary host-resolved constructor parameters:
+
+```csharp
+opts.CodeGeneration.AlwaysUseServiceLocationFor<IJsModuleBuilder>();
+```
+
+Hosts only ever inject `JsEngine`, never `IJsModuleBuilder`, so the boundary stays clean.
+
+**Migrating from v4.0** — only relevant if you construct `JsEngine` directly (not via `AddJsEval`): the ctor lost its `IServiceProvider` parameter and gained `IJsModuleBuilder`:
+
+```csharp
+// Before (4.0):
+new JsEngine(serviceProvider, moduleRegistry, options, logger);
+
+// After (4.1):
+new JsEngine(moduleRegistry, new JsModuleBuilder(serviceProvider, moduleRegistry), options, logger);
+```
 :::
 
 ## Configuration

@@ -8,22 +8,25 @@ Cocoar.JsEval is built around three concepts: a **JsEngine** for script executio
 graph TD
     DI["DI Container"] --> JE["JsEngine"]
     DI --> MR["JsModuleRegistry"]
+    DI --> MB["IJsModuleBuilder"]
     DI --> TS["TsTranspiler (optional)"]
     JE --> MR
-    MR --> M1["Http Module"]
-    MR --> M2["Database Module"]
-    MR --> M3["..."]
+    JE --> MB
+    MB --> M1["Http Module"]
+    MB --> M2["Database Module"]
+    MB --> M3["..."]
 ```
 
 ## Core Types
 
 | Type | Purpose |
 |------|---------|
-| `JsEngine` | Interface for testability. Consumers resolve this from DI. |
-| `JsEngine` | Main engine. Executes JavaScript, manages modules, exposes values and functions. |
+| `IScriptEngine` | Interface for testability. Implemented by `JsEngine`. |
+| `JsEngine` | Main engine. Executes JavaScript, manages modules, exposes values and functions. Constructor takes only typed dependencies — no `IServiceProvider`. |
 | `JsEvalBuilder` | Fluent builder for configuring engine options and module registration in one call. |
 | `IJsModule` | Marker interface for modules. Modules expose methods/properties to scripts. |
-| `JsModuleRegistry` | Registry that tracks and instantiates modules. |
+| `IJsModuleRegistry` | Read-only catalogue of registered module definitions. |
+| `IJsModuleBuilder` | Activates module instances on demand. Owns the `IServiceProvider`-based constructor-parameter resolution — the single intentional locator boundary in the package. |
 | `JsModuleAttribute` | Attribute for naming and tagging modules. |
 | `JsPreparedScript` | A pre-parsed script that can be cached and reused across engine instances. |
 | `TsTranspiler` | Standalone TypeScript-to-JavaScript transpiler. |
@@ -74,10 +77,14 @@ sequenceDiagram
 
 When a script calls `require('modulename')` or `import * from 'modulename'`:
 
-1. The engine asks the `JsModuleRegistry` for the module
-2. The registry creates an instance, injecting `IScriptEngine` and any DI services
+1. The engine looks up the module definition in `IJsModuleRegistry`
+2. `IJsModuleBuilder` activates the module — `IScriptEngine` and per-engine factory overrides (`AddModuleParameterInstance`) take precedence over the host's DI container for matching constructor-parameter types
 3. The module's public API becomes available to the script
 4. Module instances are cached per engine instance
+
+::: info Why the split between registry and builder
+`IJsModuleRegistry` is a passive catalogue; `IJsModuleBuilder` carries the active `IServiceProvider`. Keeping the locator pattern off `JsEngine`'s constructor lets static-analysis tools (Wolverine 6 codegen, AOT analyzers) walk `JsEngine`'s dependency tree without flagging the engine itself as a service-location dependency. See the [JsEngine guide](./engine.md#wolverine-6-strict-service-location-policy) for the Wolverine-specific allowlist note.
+:::
 
 ## Package Structure
 
