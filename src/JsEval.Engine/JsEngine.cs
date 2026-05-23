@@ -22,7 +22,7 @@ namespace Cocoar.JsEval.Engine;
 
 public sealed class JsEngine : IScriptEngine, IDisposable, IAsyncDisposable
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IJsModuleBuilder _moduleBuilder;
     private readonly IJsModuleRegistry _moduleRegistry;
     private readonly ILogger<JsEngine> _logger;
 
@@ -84,9 +84,9 @@ var console = {
 
     private ObjectInstance? _mainModule;
 
-    public JsEngine(IServiceProvider serviceProvider, IJsModuleRegistry moduleRegistry, JsEngineOptions options, ILogger<JsEngine>? logger = null)
+    public JsEngine(IJsModuleRegistry moduleRegistry, IJsModuleBuilder moduleBuilder, JsEngineOptions options, ILogger<JsEngine>? logger = null)
     {
-        _serviceProvider = serviceProvider;
+        _moduleBuilder = moduleBuilder;
         _moduleRegistry = moduleRegistry;
         _logger = logger ?? NullLogger<JsEngine>.Instance;
         Options = options;
@@ -569,8 +569,8 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
 
     private void BuildModule(Jint.Runtime.Modules.ModuleBuilder builder, IJsModuleDefinition definition)
     {
-        var instance = _moduleRegistry.BuildModuleInstance(
-            definition.Name, _serviceProvider, this, _providedTypeFactories, _useTaggedModules);
+        var instance = _moduleBuilder.BuildModuleInstance(
+            definition.Name, this, _providedTypeFactories, _useTaggedModules);
         _instantiatedModules[instance.GetType()] = instance;
 
         var shape = ModuleShapes.GetOrAdd(definition.ModuleType, static type => new ModuleShape(
@@ -630,7 +630,7 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
     // internal module-loading path no longer uses it (see BuildModule above).
     private JsValue Require(string value)
     {
-        var inst = _moduleRegistry.BuildModuleInstance(value, _serviceProvider, this, _providedTypeFactories, _useTaggedModules);
+        var inst = _moduleBuilder.BuildModuleInstance(value, this, _providedTypeFactories, _useTaggedModules);
         _instantiatedModules[inst.GetType()] = inst;
         return JsValue.FromObject(_engine, inst);
     }

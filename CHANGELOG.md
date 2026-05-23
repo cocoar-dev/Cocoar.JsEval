@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.1.0] — Constructor-pure JsEngine (Wolverine codegen / static-analysis friendly)
+
+`JsEngine` no longer takes `IServiceProvider` directly. The service-locator pattern required for module activation has been isolated behind a new `IJsModuleBuilder` service, so downstream codegen (Wolverine, AOT analyzers) sees only typed dependencies on the engine itself. Consumers using `services.AddJsEval(...)` are unaffected.
+
+### Added
+
+- **`IJsModuleBuilder` / `JsModuleBuilder`** in `Cocoar.JsEval` — owns the `IServiceProvider`-based module activation (constructor-parameter resolution via DI + `ActivatorUtilities`). Registered scoped by `AddJsEval`.
+
+### Changed
+
+- **`JsEngine` constructor** is now `JsEngine(IJsModuleRegistry, IJsModuleBuilder, JsEngineOptions, ILogger<JsEngine>?)` — no more `IServiceProvider`. Only direct `new JsEngine(...)` callers need to update.
+- **`IJsModuleRegistry`** reduced to `GetRegisteredModuleDefinitions()`. The `BuildModuleInstance` / `BuildSingleModuleInstance` methods moved to `IJsModuleBuilder`. `TsDefinitionService` and other registry consumers are unchanged.
+
+### Migration (only for direct ctor users)
+
+```csharp
+// Before (4.0):
+new JsEngine(serviceProvider, moduleRegistry, options, logger);
+
+// After (4.1):
+new JsEngine(moduleRegistry, new JsModuleBuilder(serviceProvider, moduleRegistry), options, logger);
+```
+
 ## [4.0.0] — Security hardening: minimal-mode defaults
 
 **Breaking.** Unsafe-by-default JS globals are now off by default. See [SECURITY.md](SECURITY.md) for the threat model.
