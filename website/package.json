@@ -12,10 +12,5 @@
     "vitepress": "^1.6.3",
     "vitepress-plugin-llms": "latest",
     "vitepress-plugin-mermaid": "^2.0.17"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }
