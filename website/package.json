@@ -2,6 +2,7 @@
   "name": "cocoar-js-eval-docs",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.2.2",
   "scripts": {
     "dev": "vitepress dev --host --port 5178",
     "build": "vitepress build",
