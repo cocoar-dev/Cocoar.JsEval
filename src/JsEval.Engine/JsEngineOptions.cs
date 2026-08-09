@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using Jint;
+using Jint.Runtime.Interop;
 using Jint.Runtime.Debugger;
 
 namespace Cocoar.JsEval.Engine;
@@ -26,6 +28,14 @@ public sealed class JsEngineOptions
         // Enable automatic .NET Task/ValueTask → JS Promise conversion.
         // Scripts can `await` .NET async methods directly.
         JintOptions.ExperimentalFeatures = ExperimentalFeature.TaskInterop;
+
+        // Jint's LiveView array conversion (default since 4.14) is taken
+        // deliberately, not by inheritance. Under the previous Copy mode a
+        // script's writes to a host T[] all appeared to succeed and none of
+        // them reached the CLR array — push(), sort(), reverse() and indexed
+        // writes were silently discarded. A live view writes those through and
+        // instead throws on the two operations a fixed-size CLR array cannot
+        // honour, push() and a length assignment. ClrArrayInteropTests pins it.
     }
 
     /// <summary>
@@ -48,6 +58,227 @@ public sealed class JsEngineOptions
     {
         JintOptions.MaxStatements(maxStatements);
         return this;
+    }
+
+    /// <summary>
+    /// Maximum nesting depth of a JavaScript value the engine will convert to
+    /// JSON, for <see cref="JsEngine.GetValue{T}"/> and
+    /// <see cref="JsEngine.JsonStringify"/>. Default: <c>512</c>.
+    ///
+    /// This is a safety limit, not a preference. JSON serialization recurses
+    /// once per level, so a value a script nested a few thousand deep exhausts
+    /// the .NET stack and terminates the process with an uncatchable
+    /// <c>StackOverflowException</c>. The default sits far above any realistic
+    /// payload and far below the crash threshold; converting a deeper value
+    /// raises <see cref="InvalidOperationException"/> instead.
+    /// </summary>
+    public int MaxJsonDepth { get; private set; } = 512;
+
+    /// <inheritdoc cref="MaxJsonDepth"/>
+    public JsEngineOptions WithMaxJsonDepth(int maxDepth)
+    {
+        if (maxDepth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxDepth), "MaxJsonDepth must be positive.");
+        MaxJsonDepth = maxDepth;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the underlying Jint <see cref="Options"/> directly, before the
+    /// engine is constructed. This is the escape hatch for Jint settings this
+    /// builder does not surface; note that options taking effect at construction
+    /// time — the interop <c>TypeResolver</c> among them — cannot be set from
+    /// <see cref="RegisterEngineConfigurator"/>, which only sees the finished engine.
+    /// </summary>
+    public JsEngineOptions ConfigureJint(Action<Options> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        configure(JintOptions);
+        return this;
+    }
+
+    /// <summary>
+    /// Restricts script access to the declared members. Anything not declared
+    /// stops existing for the script, so passing an object no longer grants its
+    /// whole reachable object graph.
+    ///
+    /// A denied member reads as <c>undefined</c>, the same as any member that
+    /// does not exist. Jint can turn that into a <c>MissingMemberException</c>
+    /// via <c>Interop.ThrowOnUnresolvedMember</c>, which makes denials obvious
+    /// but is deliberately not switched on here: that setting also fires on the
+    /// <c>toJSON</c> probe, so it breaks <c>JSON.stringify</c> for every wrapped
+    /// CLR object. Enable it through <see cref="ConfigureJint"/> if loud denials
+    /// matter more to you than serializing host objects.
+    ///
+    /// Members of types the engine never wraps — JS primitives such as the
+    /// <see cref="string"/> a property returns, or a <see cref="DateTime"/> that
+    /// crosses as a JS <c>Date</c> — are unaffected; the filter only governs CLR
+    /// member resolution.
+    /// </summary>
+    public JsEngineOptions AllowOnly(Action<JsInteropAllowlist> build)
+    {
+        ArgumentNullException.ThrowIfNull(build);
+        _allowlist ??= new JsInteropAllowlist();
+        build(_allowlist);
+        ApplyInteropRules();
+        return this;
+    }
+
+    /// <summary>
+    /// Refuses to expose instances of the given types and anything assignable to
+    /// them — <c>DbContext</c>, <c>IServiceProvider</c>, <c>HttpClient</c> and
+    /// similar. Two checks are installed: members whose declared type is denied
+    /// disappear, and any value that turns out to be a denied type at runtime is
+    /// rejected when it would be wrapped. The second check is what catches a
+    /// member declared as <c>object</c> or an interface, where the declared type
+    /// says nothing about what actually comes back.
+    ///
+    /// This is a safety net rather than the primary boundary: a deny list is only
+    /// as complete as its author, whereas <see cref="AllowOnly"/> is closed by
+    /// construction. It earns its keep by catching what someone allows by mistake.
+    /// </summary>
+    public JsEngineOptions DenyTypes(params Type[] types)
+    {
+        ArgumentNullException.ThrowIfNull(types);
+        foreach (var type in types)
+        {
+            ArgumentNullException.ThrowIfNull(type);
+            _deniedTypes.Add(type);
+        }
+        ApplyInteropRules();
+        return this;
+    }
+
+    private JsInteropAllowlist? _allowlist;
+    private readonly List<Type> _deniedTypes = [];
+
+    private void ApplyInteropRules()
+    {
+        var allowlist = _allowlist;
+        var denied = _deniedTypes;
+
+        JintOptions.Interop.TypeResolver = new TypeResolver
+        {
+            MemberFilter = member =>
+            {
+                if (denied.Count > 0 && IsDenied(YieldedType(member), denied))
+                    return false;
+
+                if (allowlist is null)
+                    return true;
+
+                return allowlist.Members.Contains(member)
+                    || (member.DeclaringType is not null && allowlist.Types.Contains(member.DeclaringType));
+            }
+        };
+
+        if (denied.Count > 0)
+        {
+            JintOptions.Interop.WrapObjectHandler = (engine, target, type) =>
+                target is not null && denied.Exists(d => d.IsInstanceOfType(target))
+                    ? throw new InvalidOperationException(
+                        $"Type '{target.GetType().FullName}' is denied and cannot be exposed to script.")
+                    : ObjectWrapper.Create(engine, target!);
+        }
+    }
+
+    private static Type? YieldedType(MemberInfo member) => member switch
+    {
+        PropertyInfo p => p.PropertyType,
+        FieldInfo f => f.FieldType,
+        MethodInfo m => m.ReturnType,
+        _ => null
+    };
+
+    private static bool IsDenied(Type? type, List<Type> denied) =>
+        type is not null && denied.Exists(d => d.IsAssignableFrom(type));
+
+    private bool _sandboxed;
+
+    /// <summary>
+    /// Locks the engine into a hardened configuration for scripts the host does
+    /// not control, and refuses any later call that would widen it again.
+    ///
+    /// Sets strict mode, disables <c>eval</c> and the <c>Function</c>
+    /// constructor, fixes culture and time zone to invariant/UTC, applies
+    /// memory, recursion, execution-stack, array and regex limits, tightens the
+    /// execution timeout and statement cap, blocks <c>GetType()</c>, reflection
+    /// and CLR assembly access, removes the shared-memory primitives, and
+    /// freezes the built-in prototypes.
+    ///
+    /// CLR interop itself stays on — that is the point of this surface. Use
+    /// <see cref="AllowOnly"/> to decide which members a script may reach and
+    /// <see cref="DenyTypes"/> to rule out types outright; both remain available
+    /// afterwards because they narrow rather than widen.
+    ///
+    /// Isolation between scripts is the engine instance: globals and prototype
+    /// changes persist for the lifetime of one <see cref="JsEngine"/>, which is
+    /// registered per DI scope. Running scripts from different sources in one
+    /// scope shares that state — resolve a separate engine for each instead.
+    /// </summary>
+    public JsEngineOptions Sandboxed()
+    {
+        if (_widened.Count > 0)
+            throw new InvalidOperationException(
+                $"Sandboxed() cannot be applied after {string.Join(", ", _widened)} — " +
+                "those grant capabilities a sandboxed engine must not have. Remove them or drop Sandboxed().");
+
+        _sandboxed = true;
+
+        JintOptions
+            .Strict()
+            .DisableStringCompilation()
+            .Culture(CultureInfo.InvariantCulture)
+            .LocalTimeZone(TimeZoneInfo.Utc)
+            .TimeoutInterval(TimeSpan.FromSeconds(2))
+            .MaxStatements(1_000_000)
+            .LimitMemory(16 * 1024 * 1024)
+            .LimitRecursion(64);
+
+        JintOptions.Constraints.MaxArraySize = 100_000;
+        JintOptions.Constraints.MaxExecutionStackCount = 256;
+        JintOptions.Constraints.RegexTimeout = TimeSpan.FromMilliseconds(500);
+        JintOptions.Constraints.PromiseTimeout = TimeSpan.FromSeconds(2);
+        JintOptions.Json.MaxParseDepth = MaxJsonDepth;
+
+        JintOptions.Interop.AllowGetType = false;
+        JintOptions.Interop.AllowSystemReflection = false;
+        JintOptions.Interop.AllowedAssemblies.Clear();
+
+        RegisterEngineConfigurator(static engine =>
+        {
+            // Shared-memory primitives can block or spin and are useless for rules.
+            engine.SetValue("Atomics", Jint.Native.JsValue.Undefined);
+            engine.SetValue("SharedArrayBuffer", Jint.Native.JsValue.Undefined);
+
+            // JSON.stringify reads inherited index properties on sparse arrays,
+            // so an unfrozen Array.prototype lets a script inject values into
+            // its own result that it never assigned.
+            engine.Execute("""
+                for (const ctor of [Object, Array, String, Number, Boolean, Date, RegExp, Function, Error]) {
+                    Object.freeze(ctor.prototype);
+                }
+                """);
+        });
+
+        return this;
+    }
+
+    private readonly List<string> _widened = [];
+
+    /// <summary>
+    /// Records a capability grant and refuses it once <see cref="Sandboxed"/>
+    /// has been applied, so the guarantee cannot be undone by a later call and
+    /// does not depend on the order the builder happens to be written in.
+    /// </summary>
+    private void Widening(string what)
+    {
+        if (_sandboxed)
+            throw new InvalidOperationException(
+                $"{what} cannot be enabled on a sandboxed engine. " +
+                "Grant capabilities through modules or AllowOnly instead, or drop Sandboxed().");
+
+        _widened.Add(what);
     }
 
     public JsEngineOptions EnableDebugMode()
@@ -86,12 +317,14 @@ public sealed class JsEngineOptions
 
     public JsEngineOptions AllowAssemblies(params Assembly[] assemblies)
     {
+        Widening(nameof(AllowAssemblies));
         JintOptions.AllowClr(assemblies);
         return this;
     }
 
     public JsEngineOptions AllowCurrentDomainAssemblies()
     {
+        Widening(nameof(AllowCurrentDomainAssemblies));
         return AllowAssemblies(AppDomain.CurrentDomain.GetAssemblies());
     }
 
@@ -103,6 +336,7 @@ public sealed class JsEngineOptions
 
     public JsEngineOptions EnableFetch()
     {
+        Widening(nameof(EnableFetch));
         FetchEnabled = true;
         return this;
     }
@@ -117,6 +351,7 @@ public sealed class JsEngineOptions
 
     public JsEngineOptions EnableNewObject()
     {
+        Widening(nameof(EnableNewObject));
         NewObjectEnabled = true;
         return this;
     }
@@ -133,6 +368,7 @@ public sealed class JsEngineOptions
 
     public JsEngineOptions EnableNewObjectAssemblyFallback(params Assembly[] assemblies)
     {
+        Widening(nameof(EnableNewObjectAssemblyFallback));
         ArgumentNullException.ThrowIfNull(assemblies);
         foreach (var asm in assemblies)
             if (asm is not null && !NewObjectAssemblyFallback.Contains(asm))
@@ -148,6 +384,7 @@ public sealed class JsEngineOptions
 
     public JsEngineOptions EnableRequire()
     {
+        Widening(nameof(EnableRequire));
         RequireEnabled = true;
         return this;
     }
@@ -162,6 +399,7 @@ public sealed class JsEngineOptions
 
     public JsEngineOptions EnableTimers()
     {
+        Widening(nameof(EnableTimers));
         TimersEnabled = true;
         return this;
     }
@@ -177,6 +415,7 @@ public sealed class JsEngineOptions
 
     public JsEngineOptions EnableConsole()
     {
+        Widening(nameof(EnableConsole));
         ConsoleEnabled = true;
         return this;
     }

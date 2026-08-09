@@ -115,6 +115,34 @@ public sealed class JsEvalBuilder
         return this;
     }
 
+    /// <inheritdoc cref="JsEngineOptions.Sandboxed()"/>
+    public JsEvalBuilder Sandboxed()
+    {
+        Options.Sandboxed();
+        return this;
+    }
+
+    /// <inheritdoc cref="JsEngineOptions.ConfigureJint(Action{Jint.Options})"/>
+    public JsEvalBuilder ConfigureJint(Action<Jint.Options> configure)
+    {
+        Options.ConfigureJint(configure);
+        return this;
+    }
+
+    /// <inheritdoc cref="JsEngineOptions.AllowOnly(Action{JsInteropAllowlist})"/>
+    public JsEvalBuilder AllowOnly(Action<JsInteropAllowlist> build)
+    {
+        Options.AllowOnly(build);
+        return this;
+    }
+
+    /// <inheritdoc cref="JsEngineOptions.DenyTypes(Type[])"/>
+    public JsEvalBuilder DenyTypes(params Type[] types)
+    {
+        Options.DenyTypes(types);
+        return this;
+    }
+
     /// <summary>
     /// Registers a callback invoked after the underlying Jint engine is created.
     /// Used by add-on packages to register their globals.

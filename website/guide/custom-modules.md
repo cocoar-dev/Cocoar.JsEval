@@ -2,6 +2,18 @@
 
 You can create your own modules to expose application-specific functionality to scripts.
 
+::: warning Modules grant host capabilities
+A registered module is an explicit capability granted by the host. Its public
+API may intentionally provide database, HTTP, filesystem or even reflection
+access. Scripts are therefore only as restricted as the modules made available
+to them. This is expected behavior, not a sandbox escape.
+
+Use an allowlist appropriate for each execution context, expose the smallest
+useful API, and do not return internal service or repository instances. See
+[JSON-only Sandbox](/guide/sandbox#capability-modules) for the sandbox capability
+model and its current implementation status.
+:::
+
 ## Creating a Module
 
 A module is a class that implements `IJsModule`:

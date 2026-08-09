@@ -284,6 +284,124 @@ services.AddJsEval(b => b
 const dt = NewObject('MyDomainType');
 ```
 
+## Restricting what a script can reach
+
+Passing an object to a script grants more than the object. Every public member is
+reachable, and so is every object those members return — a `Customer` with
+`Orders` reaches `Order`, which reaches `Tenant`, which reaches whatever the
+tenant holds. Nobody decided to expose the last one; it came along, and the
+reachable set grows with every property a later refactor adds.
+
+Two independent switches narrow this, and untrusted scripts generally want both.
+
+### `AllowOnly` — the reachable surface
+
+Declares the members a script may use. Anything not declared stops existing for
+the script, so the surface is what the list says rather than the transitive
+closure of what you passed in.
+
+```csharp
+services.AddJsEval(b => b
+    .AllowOnly(a => a
+        .Member((Customer c) => c.Name)
+        .Member((Customer c) => c.Orders)
+        .Method((Customer c) => c.Greet(default!))
+        .Member((Order o) => o.Total)));
+```
+
+```javascript
+customer.Name                          // "Alice"
+customer.Orders[0].Total               // 99
+customer.PasswordHash                  // undefined
+customer.Orders[0].Tenant              // undefined — the graph stops here
+```
+
+Members are named through expressions, so renaming one is a compile error rather
+than a silently narrower sandbox. Enumeration is filtered too: `Object.keys`,
+`for..in`, `JSON.stringify` and `Object.entries` report only declared members,
+on nested objects as well.
+
+Values the engine never wraps are unaffected, which keeps the list short. A
+property returning a `string` still has `startsWith`, and a `DateTime` crosses as
+a JS `Date` with its usual methods — neither goes through CLR member resolution.
+Use `.Type<T>()` for a value-like framework type whose members you do want
+wholesale; do not use it on your own service or entity types, since that is
+exactly the transitive reach this list exists to prevent.
+
+A denied member reads as `undefined`, the same as one that never existed. Jint
+can raise a `MissingMemberException` instead via
+`ConfigureJint(o => o.Interop.ThrowOnUnresolvedMember = true)`, which makes
+denials obvious — at the cost of `JSON.stringify` on any wrapped CLR object,
+because the same switch fires on its `toJSON` probe.
+
+### `DenyTypes` — types that are never exposed
+
+```csharp
+services.AddJsEval(b => b.DenyTypes(typeof(DbContext), typeof(IServiceProvider)));
+```
+
+Refuses instances of these types and anything assignable to them. Two checks are
+installed: members whose *declared* type is denied disappear, and any value that
+turns out to be a denied type *at runtime* is rejected when it would be wrapped.
+The second one is what catches a member declared as `object` or an interface,
+where the declared type says nothing about what actually comes back — without it
+a deny list silently does nothing in exactly those cases.
+
+Treat this as a safety net rather than the boundary. A deny list is only as
+complete as its author, whereas `AllowOnly` is closed by construction; denials
+earn their keep by catching what someone allows by mistake.
+
+## Sandboxed mode
+
+`Sandboxed()` locks the engine into a hardened configuration and refuses any
+later call that would widen it again.
+
+```csharp
+services.AddJsEval(b => b
+    .Sandboxed()
+    .AllowOnly(a => a.Member((Customer c) => c.Name))
+    .DenyTypes(typeof(DbContext)));
+```
+
+It sets strict mode, disables `eval` and the `Function` constructor, fixes
+culture and time zone to invariant/UTC, applies memory, recursion,
+execution-stack, array and regex limits, tightens the execution timeout and
+statement cap, blocks `GetType()`, reflection and CLR assembly access, removes
+`Atomics` / `SharedArrayBuffer`, and freezes the built-in prototypes.
+
+CLR interop stays on — real objects and real method calls are the point of this
+surface.
+
+::: warning Sandboxed() does not narrow the object graph
+It hardens what a script can do **on its own**; it does not change what a passed
+object grants. `holder.Inner.Secret` is still reachable under `Sandboxed()`
+alone. Pair it with `AllowOnly` for untrusted scripts — the two axes are
+independent.
+:::
+
+The latch works in both directions, so the guarantee never depends on the order
+the builder happens to be written in:
+
+```csharp
+b.Sandboxed().EnableFetch()   // throws: cannot be enabled on a sandboxed engine
+b.EnableFetch().Sandboxed()   // throws: cannot be applied after EnableFetch
+```
+
+`AllowOnly` and `DenyTypes` remain available afterwards because they narrow
+rather than grant.
+
+::: warning What it still does not give you
+Isolation between scripts is the engine instance: globals and prototype changes
+persist for the lifetime of one `JsEngine`, which is registered per DI scope.
+Running scripts from different sources in one scope shares that state — resolve
+a separate engine for each.
+
+The memory limit is also enforced between statements, so a single large
+allocation (`'x'.repeat(n)`) commits before any limit observes it, and a defect
+in Jint itself still reaches the host. For genuinely hostile input, run the
+engine in a process with an OS-level memory cap.
+:::
+
 ## Built-in Globals
 
 Since 4.0 most globals that touch host primitives are **off by default** for security. Enable them explicitly via the corresponding builder flag — see [SECURITY.md](https://github.com/cocoar/cocoar.js-eval/blob/develop/SECURITY.md) for the threat model.

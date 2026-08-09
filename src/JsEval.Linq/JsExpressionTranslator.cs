@@ -88,6 +88,11 @@ public static class JsExpressionTranslator
         public readonly TranslationOptions Options;
         public readonly List<ParameterExpression> ParamStack = new();
 
+        // Constants that came from Options.IdentifierResolver (and results
+        // folded from them). Only calls on these are evaluated at translation
+        // time — every other method call keeps the shape callers already rely on.
+        public readonly HashSet<LinqExpr> HostConstants = new(ReferenceEqualityComparer.Instance);
+
         // Current AST recursion depth — incremented on entry to Visit/VisitChainElement,
         // decremented on exit. Exceeding Options.MaxAstDepth raises a controlled
         // InvalidOperationException instead of letting the .NET stack overflow
@@ -211,6 +216,17 @@ public static class JsExpressionTranslator
     {
         var p = ctx.Find(id.Name);
         if (p != null) return p;
+
+        // A host-supplied resolver wins over the engine lookup: it is the only
+        // way to reach a binding the engine cannot see, such as an imported
+        // module, whose namespace is module-scoped rather than global.
+        var resolved = ctx.Options.IdentifierResolver?.Invoke(id.Name);
+        if (resolved != null)
+        {
+            var constant = LinqExpr.Constant(resolved, resolved.GetType());
+            ctx.HostConstants.Add(constant);
+            return constant;
+        }
 
         if (ctx.Engine != null)
         {
@@ -341,7 +357,43 @@ public static class JsExpressionTranslator
         var method = ReflectionCache.GetMethod(target.Type, methodId.Name, argTypes)
             ?? throw new InvalidOperationException(
                 $"Method '{methodId.Name}' not found on {target.Type.Name} with {args.Length} arg(s)");
-        return LinqExpr.Call(target, method, args);
+
+        return FoldIfParameterIndependent(LinqExpr.Call(target, method, args), method.ReturnType, ctx);
+    }
+
+    /// <summary>
+    /// Evaluates a call that does not depend on the lambda parameter and
+    /// returns its result as a constant. <c>u =&gt; u.Name === host.Lookup('x')</c>
+    /// asks a question about the host, not about the row, so it is answered
+    /// once during translation. The alternative — leaving the call in the tree —
+    /// forces the provider either to translate a method it knows nothing about
+    /// or to invoke it per row.
+    /// </summary>
+    private static LinqExpr FoldIfParameterIndependent(MethodCallExpression call, Type returnType, Context ctx)
+    {
+        if (call.Object is null || !ctx.HostConstants.Contains(call.Object))
+            return call;
+        foreach (var argument in call.Arguments)
+        {
+            if (argument is not ConstantExpression)
+                return call;
+        }
+
+        object? value;
+        try
+        {
+            value = LinqExpr.Lambda(call).Compile().DynamicInvoke();
+        }
+        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            throw new InvalidOperationException(
+                $"Rule called '{call.Method.Name}' during translation and it failed: {ex.InnerException.Message}",
+                ex.InnerException);
+        }
+
+        var folded = LinqExpr.Constant(value, returnType);
+        ctx.HostConstants.Add(folded);   // so host.A().B() folds too
+        return folded;
     }
 
     /// <summary>

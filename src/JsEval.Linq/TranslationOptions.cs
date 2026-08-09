@@ -12,6 +12,22 @@ public sealed class TranslationOptions
     public IJsMethodMap MethodMap { get; init; } = new DefaultJsMethodMap();
 
     /// <summary>
+    /// Resolves a free identifier in a rule to a host object, and is consulted
+    /// before the engine's own closure lookup. This is how a caller exposes
+    /// something the engine cannot resolve on its own — most importantly an
+    /// imported module, whose binding is module-scoped rather than global and
+    /// therefore invisible to the engine lookup.
+    ///
+    /// The returned object is used at translation time only. A call on it whose
+    /// arguments are all constant is evaluated immediately and folded into a
+    /// <c>ConstantExpression</c>, so what reaches the LINQ provider is the
+    /// result, not a call the provider would have to translate or run per row.
+    ///
+    /// Return <c>null</c> for names this resolver does not know.
+    /// </summary>
+    public Func<string, object?>? IdentifierResolver { get; init; }
+
+    /// <summary>
     /// If <c>true</c> (default), numeric literals (JS double) are coerced to the
     /// target property's CLR type (int/long/decimal/...) in binary comparisons.
     /// </summary>

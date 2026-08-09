@@ -276,10 +276,25 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
 
     public string JsonStringify(object? value) => value switch
     {
-        JsValue jsValue => _jsonSerializer.Serialize(jsValue).AsString(),
+        JsValue jsValue => SerializeGuarded(jsValue),
         JsonNode jsonNode => jsonNode.ToJsonString(),
         _ => JsonHelper.ToJson(value)
     };
+
+    /// <summary>
+    /// Serializes a JS value after checking its nesting depth. Jint's serializer
+    /// recurses per level, so an unbounded value would take the process down
+    /// with an uncatchable <c>StackOverflowException</c> rather than failing.
+    /// </summary>
+    private string SerializeGuarded(JsValue jsValue)
+    {
+        if (JsValueDepth.Exceeds(jsValue, Options.MaxJsonDepth))
+            throw new InvalidOperationException(
+                $"The value nests deeper than the configured limit of {Options.MaxJsonDepth} " +
+                "(JsEngineOptions.WithMaxJsonDepth). Serializing it would overflow the stack.");
+
+        return _jsonSerializer.Serialize(jsValue).AsString();
+    }
 
     public object? ConvertToDefaultObject(object? value)
     {
@@ -323,13 +338,22 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
         if (typeof(T) == typeof(long))   return (T)(object)(long)jsValue.AsNumber();
         if (typeof(T) == typeof(float))  return (T)(object)(float)jsValue.AsNumber();
 
+        // ToObject() rebuilds a pure JS object graph as nested CLR dictionaries
+        // and recurses while doing so, so the depth check has to happen before
+        // it — not just before serialization. A wrapped host object is exempt:
+        // ToObject() hands back the original reference without walking anything.
+        if (jsValue is not Jint.Runtime.Interop.ObjectWrapper && JsValueDepth.Exceeds(jsValue, Options.MaxJsonDepth))
+            throw new InvalidOperationException(
+                $"The value nests deeper than the configured limit of {Options.MaxJsonDepth} " +
+                "(JsEngineOptions.WithMaxJsonDepth). Converting it would overflow the stack.");
+
         // Reference types: ToObject() preserves the original .NET reference
         // (e.g. IQueryable<T>, custom classes set via SetValue).
         // Only fall back to JSON for value types that ToObject() can't produce directly.
         var obj = jsValue.ToObject();
         if (obj is T typed) return typed;
 
-        return JsonHelper.ToObject<T>(_jsonSerializer.Serialize(jsValue).AsString());
+        return JsonHelper.ToObject<T>(SerializeGuarded(jsValue));
     }
 
     public object GetValue(string name) =>

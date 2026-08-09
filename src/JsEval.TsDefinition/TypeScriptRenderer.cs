@@ -49,9 +49,22 @@ public class TypeScriptRenderer
 
     private static string GetIndentString(int indent = 0) => new(' ', indent);
 
+    /// <summary>
+    /// Rewrites an outbound CLR array to <c>ClrArray&lt;T&gt;</c>. The engine
+    /// hands script a live view over the .NET array: elements are writable and
+    /// write through, but the array is fixed-size, so <c>push</c> and a
+    /// <c>length</c> assignment throw. Plain <c>T[]</c> would advertise both as
+    /// legal. Inbound (parameter) positions deliberately keep <c>T[]</c> —
+    /// there a script still passes an ordinary JS array.
+    /// </summary>
+    private static string AsClrArrayView(TypeDefinition typeDefinition, string built) =>
+        typeDefinition.IsArray && built.EndsWith("[]", StringComparison.Ordinal)
+            ? $"ClrArray<{built[..^2]}>"
+            : built;
+
     public string Render(PropertyDefinition propertyDefinition, int indent)
     {
-        var prop = BuildTypeString(propertyDefinition.Type);
+        var prop = AsClrArrayView(propertyDefinition.Type, BuildTypeString(propertyDefinition.Type));
         var otherType = GetTypeString(propertyDefinition.Type);
 
         var comments = prop != otherType ? BuildDocComments(indent, otherType) : null;
@@ -99,7 +112,7 @@ public class TypeScriptRenderer
         var parameters = new List<string>();
         var commentLines = new List<string>();
 
-        var returnType = BuildTypeString(indexerDefinition.ReturnType);
+        var returnType = AsClrArrayView(indexerDefinition.ReturnType, BuildTypeString(indexerDefinition.ReturnType));
         var otherReturnType = GetTypeString(indexerDefinition.ReturnType);
 
         foreach (var param in indexerDefinition.Parameters)
@@ -127,6 +140,7 @@ public class TypeScriptRenderer
         var returnType = BuildTypeString(methodDefinition.ReturnType);
         if (methodDefinition.ReturnType.IsArray && !returnType.EndsWith("[]", StringComparison.Ordinal))
             returnType += "[]";
+        returnType = AsClrArrayView(methodDefinition.ReturnType, returnType);
 
         var otherReturnType = GetTypeString(methodDefinition.ReturnType);
         if (methodDefinition.ReturnType.IsArray && !otherReturnType.EndsWith("[]", StringComparison.Ordinal))

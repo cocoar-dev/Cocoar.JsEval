@@ -2,8 +2,13 @@ namespace Cocoar.JsEval.Linq;
 
 /// <summary>
 /// Ambient per-call context used by <see cref="JsLinqExtensions"/> to reach
-/// the currently executing Jint engine (needed by the translator for closure resolution).
-/// Host sets this via <see cref="Scope"/> before calling into JS and disposes it after.
+/// the currently executing Jint engine for closure resolution. Host sets this
+/// via <see cref="Scope"/> before calling into JS and disposes it after.
+///
+/// Opening a scope is a capability grant, not just plumbing — see the remarks
+/// on <see cref="Scope(Jint.Engine, TranslationOptions)"/>. With no scope
+/// open, closure resolution is off and a translated rule can reach nothing
+/// beyond the entity it queries.
 /// </summary>
 public static class JsLinqContext
 {
@@ -26,6 +31,25 @@ public static class JsLinqContext
     /// Enter a scope for a given engine. Disposing the returned handle restores
     /// the previous context. Safe for nesting.
     /// </summary>
+    /// <remarks>
+    /// The scoped engine decides what a translated rule can reach. Closure
+    /// resolution looks up every free identifier in it, and members are then
+    /// resolved on the result by reflection — any public property, and any
+    /// public method with arguments the rule chooses. The rule is never
+    /// executed as JavaScript, but the expression tree it produces is evaluated
+    /// later by the LINQ provider, and a call on a captured host object runs at
+    /// that point. Scoping an engine that carries modules or
+    /// <c>SetValue</c>-registered services makes them callable from every rule
+    /// translated inside the scope.
+    ///
+    /// That is the intended convenience for rules the application itself
+    /// authors. For rules written by tenants or end users, either open no scope
+    /// — a free identifier then fails translation with <c>Unresolved
+    /// identifier</c> instead of resolving — or scope a bare engine with
+    /// nothing registered on it. Note also that every public property of the
+    /// queried entity is reachable, so project to a DTO carrying only what
+    /// rules are meant to see.
+    /// </remarks>
     public static IDisposable Scope(Jint.Engine engine, TranslationOptions? options = null)
     {
         var previous = _state.Value;

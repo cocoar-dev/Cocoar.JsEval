@@ -61,7 +61,26 @@ using (JsLinqContext.Scope(engine))
 }
 ```
 
-`JsLinqContext.Scope(engine)` sets an ambient engine reference that the extension methods use to resolve closure variables during translation. Always wrap script execution in it.
+`JsLinqContext.Scope(engine)` sets an ambient engine reference that the extension methods use to resolve closure variables during translation. Wrap script execution in it whenever your rules need to close over engine values — which is the normal case for rules you author yourself.
+
+::: warning The scope is a capability grant
+Opening a scope decides what a translated rule can reach, so it deserves the same consideration as registering a module.
+
+Closure resolution looks up every free identifier among the scoped engine's **globals**, and the translator then resolves members on whatever it finds by reflection — any public property, and any public method with arguments the rule chooses. A rule is not executed as JavaScript, but the expression tree it produces is evaluated later by the LINQ provider, and a call on a captured host object runs then. An object handed to `JsEngine.SetValue` is therefore callable from any rule translated inside that scope:
+
+```js
+// with: engine.SetValue("host", new HostService());
+u => u.Name === host.ReadFile('C:/secrets.txt')
+```
+
+Imported modules are *not* reachable this way. Closure resolution reads globals, while `import * as host from 'host'` creates a lexical binding, so a rule referring to `host` fails translation with `Unresolved identifier` even inside a scope. Only `SetValue`-registered globals cross into a translated rule.
+
+For rules you write yourself this is exactly the intended convenience. For rules authored by tenants or end users, either omit the scope entirely — closure resolution is then off and a rule can reach nothing but the entity — or scope a bare engine that has nothing registered on it. Without a scope, a free identifier fails translation with a clear `Unresolved identifier` error rather than silently resolving.
+
+The second half of the boundary is the entity type. Every public property of `T` is reachable, so `u => u.PasswordHash.startsWith('x')` translates just as happily as a rule over business fields. Project to a DTO that carries only what rules are meant to see rather than exposing the persistence entity.
+
+A translated rule is also not resource-bounded the way [`JsSandbox`](/guide/sandbox) is: the predicate runs inside your query, so an expensive one costs database time. Keep the usual query timeouts in place.
+:::
 
 ## Ordering
 
