@@ -291,6 +291,51 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
         }
     }
 
+    // ---------------------------------------------------------------------
+    // Async terminals: the case Marten 9 forces
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Marten 9 refuses synchronous execution, so <c>count</c>, <c>any</c> and
+    /// <c>find</c> throw on it. Their async counterparts locate Marten's own
+    /// <c>CountAsync</c>/<c>AnyAsync</c>/<c>FirstOrDefaultAsync</c> at runtime,
+    /// which is what makes `await users.countAsync(...)` in a script the exact
+    /// mirror of `await query.CountAsync()` in C#.
+    /// </summary>
+    [Fact(SkipUnless = nameof(DatabaseAvailable), Skip = "requires a local PostgreSQL")]
+    public async Task AsyncTerminals_WorkAgainstMarten_WhereSynchronousOnesRefuse()
+    {
+        // A plain engine with the LINQ extensions: this test is about the async
+        // terminals against a real provider, not about the sandbox surface, and
+        // it hands the script the entity queryable directly.
+        var sc = new ServiceCollection();
+        sc.AddJsEval(b => b.AddLinq());
+        using var engine = sc.BuildServiceProvider().GetRequiredService<JsEngine>();
+        await using (var session = _store!.LightweightSession())
+        {
+            engine.SetValue("users", session.Query<User>());
+
+            using (JsLinqContext.Scope(engine.UnderlyingEngine))
+            {
+                await engine.ExecuteAsync("""
+                    export const active   = await users.countAsync(u => u.IsActive);
+                    export const anyOld   = await users.anyAsync(u => u.Age > 40);
+                    const cara            = await users.findAsync(u => u.Name === 'Cara');
+                    export const caraDept = cara.Department;
+                    """);
+
+                Assert.Equal(3, engine.GetValue<int>("active"));
+                Assert.True(engine.GetValue<bool>("anyOld"));
+                Assert.Equal("sales", engine.GetValue<string>("caraDept"));
+
+                // The synchronous counterpart is what Marten 9 rejects.
+                var ex = Assert.ThrowsAny<Exception>(
+                    () => engine.EvaluateExpression("users.count(u => u.IsActive)"));
+                Assert.Contains("asynchronous", Flatten(ex), StringComparison.OrdinalIgnoreCase);
+            }
+        }
+    }
+
     private static string Flatten(Exception ex)
     {
         var text = new System.Text.StringBuilder();

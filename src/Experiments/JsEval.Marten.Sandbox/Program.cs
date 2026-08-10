@@ -4,6 +4,7 @@ using Cocoar.JsEval.Linq.Dependencies;
 using Cocoar.JsEval.Marten.Sandbox;
 using Cocoar.JsEval.Marten.Sandbox.Scenarios;
 using Jint;
+using Jint.Native;
 using Marten;
 
 // Npgsql 6+ rejects DateTime with Kind=Utc by default; re-enable the legacy
@@ -45,24 +46,26 @@ await Run("1. JS -> Expression -> Marten: SQL byte-identical to C# source lambda
             ? ">>> BYTE-IDENTICAL TO C# BASELINE."
             : $">>> DIFFERS!\nBaseline: {baselineSql}\nActual:   {actual}");
 
-        // count() / find() / any() are terminal: JsLinqExtensions materialises
-        // them synchronously, which Marten 9 refuses outright. Shown rather than
-        // hidden, because the limitation is the library's, not this demo's.
+        // The synchronous terminals execute the query on the spot, which Marten 9
+        // refuses. Their async counterparts find Marten's own CountAsync /
+        // FirstOrDefaultAsync at run time, so a script awaits them exactly as C#
+        // would. Both are shown side by side.
         foreach (var (label, js) in new[]
                  {
-                     ("users.count(u => u.IsActive)", "users.count(u => u.IsActive)"),
-                     ("users.find(u => u.Name === 'Bob')", "users.find(u => u.Name === 'Bob')"),
+                     ("users.count(u => u.IsActive)      [sync] ", "users.count(u => u.IsActive)"),
+                     ("users.find(u => u.Name === 'Bob') [sync] ", "users.find(u => u.Name === 'Bob')"),
                  })
         {
-            try
-            {
-                Console.WriteLine($"\n{label} -> {engine.Evaluate(js).ToObject()}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"\n{label} -> UNSUPPORTED: {ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
-            }
+            try { Console.WriteLine($"\n{label} -> {engine.Evaluate(js).ToObject()}"); }
+            catch (Exception ex) { Console.WriteLine($"\n{label} -> REFUSED: {ex.Message.Split('\n')[0]}"); }
         }
+
+        var active = await JsLinqExtensions.CountAsync(session.Query<User>(), JsValue.Null);
+        Console.WriteLine($"\nusers.countAsync(null)             [async] -> {active}");
+
+        var bob = await JsLinqExtensions.FindAsync(
+            session.Query<User>().Where(u => u.Name == "Bob"), JsValue.Null);
+        Console.WriteLine($"users.findAsync(...)               [async] -> {bob?.Name} (age={bob?.Age})");
     }
 });
 
