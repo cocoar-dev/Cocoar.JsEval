@@ -17,6 +17,13 @@ dotnet test src/Tests/JsEval.Tests.Engine
 # Run specific test by name pattern
 dotnet test src/Cocoar.JsEval.slnx --filter "FullyQualifiedName~TestMethodName"
 
+# Marten integration tests (sandboxed rule -> real SQL). These SKIP unless a
+# PostgreSQL answers. Local dev DB is port 5433; it uses a real password, so the
+# connection string has to be supplied — the 5433 default only matches a
+# plain-Docker Postgres.
+JSEVAL_PG_CONNSTRING="Host=localhost;Port=5433;Username=postgres;Password=...;Database=postgres" \
+  dotnet test src/Tests/JsEval.Tests.Marten
+
 # Run benchmarks
 cd src/Benchmarks/JsEval.Benchmarks && dotnet run -c Release -- --filter "*EngineBenchmarks*"
 
@@ -29,7 +36,7 @@ cd website && npm run dev
 
 ## Architecture Overview
 
-**Cocoar.JsEval** is a JavaScript/TypeScript execution library for .NET 10, built on Jint 4.8 (ES2025).
+**Cocoar.JsEval** is a JavaScript/TypeScript execution library for .NET 10, built on Jint 4.15.3 (ES2025).
 
 ### Core Packages
 

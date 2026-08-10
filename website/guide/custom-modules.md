@@ -9,9 +9,11 @@ access. Scripts are therefore only as restricted as the modules made available
 to them. This is expected behavior, not a sandbox escape.
 
 Use an allowlist appropriate for each execution context, expose the smallest
-useful API, and do not return internal service or repository instances. See
-[JSON-only Sandbox](/guide/sandbox#capability-modules) for the sandbox capability
-model and its current implementation status.
+useful API, and do not return internal service or repository instances — a
+returned object is wrapped, not copied, so the script reaches whatever it
+reaches. For untrusted scripts, combine the module with
+[`Sandboxed()` and `AllowOnly`](/guide/engine#restricting-what-a-script-can-reach),
+which decide what the returned object may expose.
 :::
 
 ## Creating a Module
@@ -105,3 +107,32 @@ var engine = serviceProvider.GetRequiredService<JsEngine>();
 // Register a factory for a specific type
 engine.AddModuleParameterInstance(typeof(HttpContext), () => currentHttpContext);
 ```
+
+## How arguments and results cross
+
+Each public method of a module is exported as a JavaScript function. Arguments are
+marshalled to the parameter's CLR type, and a method returning a `Task` is awaited
+before its result crosses back.
+
+**Return DTOs.** A returned object is *wrapped*, not copied — the script reaches
+whatever that object reaches. Handing back an internal service or repository hands
+out its object graph. For untrusted scripts, combine the module with
+[`AllowOnly`](/guide/engine#restricting-what-a-script-can-reach), which decides
+which members of a returned object exist for the script.
+
+**A `JsValue` parameter receives the script's value unconverted.** This is the one
+exception to argument marshalling, and it is how a module accepts an arrow function
+it means to inspect rather than run — a rule it will
+[translate into an expression tree](/guide/linq#reaching-a-module-from-inside-a-rule):
+
+```csharp
+public sealed class RulesModule : IJsModule
+{
+    // Without the JsValue parameter type the arrow would arrive as a delegate
+    // and its AST -- the whole point -- would be gone.
+    public List<UserDto> Find(JsValue rule) { /* translate `rule`, then query */ }
+}
+```
+
+An exception thrown inside a module keeps its own message when it surfaces in the
+script, so a module's validation reads as the reason the call was refused.

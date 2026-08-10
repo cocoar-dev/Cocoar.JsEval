@@ -52,7 +52,6 @@ export default withMermaid(
             text: 'Engine',
             items: [
               { text: 'JsEngine', link: '/guide/engine' },
-              { text: 'JSON-only Sandbox', link: '/guide/sandbox' },
               { text: 'TypeScript', link: '/guide/typescript' },
               { text: 'fetch() API', link: '/guide/fetch' },
               { text: 'Performance', link: '/guide/performance' },

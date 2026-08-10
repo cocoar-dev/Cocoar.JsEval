@@ -14,13 +14,9 @@ We prefer coordinated disclosure. After a fix is available, we'll publish releas
 
 ## Threat model
 
-`Cocoar.JsEval` provides three distinct execution surfaces:
+`Cocoar.JsEval` provides two distinct execution surfaces:
 
-- **`JsSandbox`** is the untrusted-rule surface. It exposes no CLR objects,
-  modules, host functions, or underlying Jint engine. Arbitrary named values
-  supplied through `SetValue` cross the boundary only as JSON and are retrieved
-  through `GetValue<T>` as newly deserialized CLR values.
-- **`JsEngine`** is the host-integration surface. Its powerful CLR and module
+- **`JsEngine`** is both the host-integration and the untrusted-rule surface. Its powerful CLR and module
   capabilities are opt-in, but any CLR object passed through `SetValue` exposes
   its public interop surface — and, transitively, everything reachable from it —
   and must therefore be considered a granted capability. `AllowOnly` narrows that
@@ -29,7 +25,10 @@ We prefer coordinated disclosure. After a fix is available, we'll publish releas
   `object` cannot smuggle one through), and `Sandboxed()` locks the runtime down
   and refuses any later call that would widen it again. The three are
   independent: `Sandboxed()` governs what a script can do on its own, `AllowOnly`
-  what it can reach.
+  what it can reach. An untrusted script wants both — `Sandboxed()` alone leaves
+  the object graph of anything passed in fully reachable. Modules are the
+  capability channel; a module that returns an internal service hands out its
+  object graph unless `AllowOnly` narrows it.
 - **`JsExpressionTranslator`** (Cocoar.JsEval.Linq) turns a JS arrow function
   into an expression tree without executing it as JavaScript — but the tree is
   evaluated later by the LINQ provider. Opening a `JsLinqContext.Scope` makes
@@ -41,7 +40,7 @@ We prefer coordinated disclosure. After a fix is available, we'll publish releas
   reachable, which is why untrusted rules should query a DTO rather than a
   persistence entity. See the LINQ guide for the full recommendation.
 
-Globals that grant access to host primitives (`NewObject`, `require`, `setTimeout`, `setInterval`, `console`) are off on `JsEngine` until the consumer explicitly opts in via the corresponding builder flag. They cannot be enabled on `JsSandbox`.
+Globals that grant access to host primitives (`NewObject`, `require`, `setTimeout`, `setInterval`, `console`) are off on `JsEngine` until the consumer explicitly opts in via the corresponding builder flag. `Sandboxed()` refuses every one of those grants, in either order.
 
 Defense-in-depth guards are on by default:
 
@@ -50,16 +49,15 @@ Defense-in-depth guards are on by default:
 - **Translator depth cap** — 256-deep AST recursion in `JsExpressionTranslator` (`TranslationOptions.MaxAstDepth`). Throws `InvalidOperationException` instead of letting the host process crash with `StackOverflowException`.
 - **TS-transpiler depth scan** — pre-parse paren/bracket/brace scan in `TsTranspiler` (`TsTranspiler.MaxParseDepth`, default 128). Rejects deeply nested input with a controlled `TsTranspileException` before the embedded TypeScript compiler (running as JavaScript inside Jint) can exhaust the .NET stack at ~300 levels.
 
-`JsSandbox` additionally uses a fresh engine per call, disables string
-compilation (`eval` / `Function`), CLR interop, reflection, CLR writes and
-operator overloading, removes shared-memory atomics, freezes built-in
-prototypes, fixes culture/timezone to invariant/UTC, and applies memory,
-recursion, execution-stack, array, regex, script-size, input-size,
-output-size and nesting-depth limits. Every execution failure surfaces as
-`JsSandboxException`.
+`Sandboxed()` additionally sets strict mode, disables string compilation
+(`eval` / `Function`), blocks `GetType()`, reflection and CLR assembly access,
+removes the shared-memory primitives, freezes built-in prototypes, fixes
+culture/timezone to invariant/UTC, and applies memory, recursion,
+execution-stack, array and regex limits. CLR interop itself stays on — real
+objects and real method calls are the point of the surface; `AllowOnly` decides
+which of them a script may reach.
 
-- **Nesting-depth cap on `JsEngine`** — 512 levels by default (`JsEngineOptions.WithMaxJsonDepth`), checked before `GetValue<T>` and `JsonStringify` convert a value. Both paths recurse per level, so without it a script nesting a few thousand deep terminated the host process with an uncatchable `StackOverflowException`.
-- **Nesting-depth cap on `JsSandbox`** — 64 levels by default (`JsSandboxOptions.MaxDepth`), checked iteratively before JSON serialization. JSON serialization recurses once per level, so without this cap a script nesting a few thousand objects terminates the host process with an uncatchable `StackOverflowException` while staying inside every other limit.
+- **Nesting-depth cap** — 512 levels by default (`JsEngineOptions.WithMaxJsonDepth`), checked before `GetValue<T>` and `JsonStringify` convert a value. Both paths recurse per level, so without it a script nesting a few thousand deep terminated the host process with an uncatchable `StackOverflowException` while staying inside every other limit.
 
 **Known limitation — memory is not fully bounded in-process.** `MemoryLimitBytes` is checked between statements, so allocation spread over a loop is caught, but a single large allocation is not: `'x'.repeat(800 * 1024 * 1024)` commits the whole string before any limit observes it. The run then fails, but the memory was already taken, and no Jint setting closes this. Run untrusted input in a process with an OS-level memory cap.
 
@@ -71,8 +69,7 @@ There is **no sandbox isolation at the OS level**. The library cannot defend aga
 |---|---|---|
 | **High** (you wrote the script) | App developer | Enable whatever globals the script needs. Constraints can be relaxed (`WithExecutionTimeout(Timeout.InfiniteTimeSpan)`) if scripts run unattended. |
 | **Medium** (admin-authored, audited) | Trusted operator | Default constraints. Enable only the globals the script needs (`EnableConsole()` + targeted `EnableNewObjectAssemblyFallback(typeof(YourType).Assembly)`). Avoid `EnableRequire()` and `EnableTimers()` unless required. |
-| **Low, but needs real CLR access** | Untrusted | `Sandboxed()` for the runtime plus `AllowOnly` for the reachable surface, and `DenyTypes` for types that must never cross. Pass DTOs rather than persistence entities. One engine per script source — state persists for the engine's lifetime. |
-| **Low** (tenant- or end-user-authored) | Untrusted | Use `JsSandbox`, pass only JSON-serializable data, and validate the returned object before applying changes. For a hard isolation boundary, execute it in a restricted worker process as well. If such authors also write LINQ rules, translate them with no `JsLinqContext.Scope` open (or a bare engine) and query a DTO rather than a persistence entity. |
+| **Low** (tenant- or end-user-authored) | Untrusted | `Sandboxed()` for the runtime plus `AllowOnly` for the reachable surface, and `DenyTypes` for types that must never cross. Pass DTOs rather than persistence entities, and validate the result before applying changes. One engine per script source — state persists for the engine's lifetime. For a hard isolation boundary, execute it in a restricted worker process as well. If such authors also write LINQ rules, translate them with no `JsLinqContext.Scope` open (or a bare engine) and query a DTO rather than a persistence entity. |
 
 ## Reporting expectations
 

@@ -73,14 +73,74 @@ Closure resolution looks up every free identifier among the scoped engine's **gl
 u => u.Name === host.ReadFile('C:/secrets.txt')
 ```
 
-Imported modules are *not* reachable this way. Closure resolution reads globals, while `import * as host from 'host'` creates a lexical binding, so a rule referring to `host` fails translation with `Unresolved identifier` even inside a scope. Only `SetValue`-registered globals cross into a translated rule.
+Imported modules are *not* reachable this way. Closure resolution reads globals, while `import * as host from 'host'` creates a lexical binding, so a rule referring to `host` fails translation with `Unresolved identifier` even inside a scope. Through a scope, only `SetValue`-registered globals cross into a translated rule — to reach a module deliberately, see [`IdentifierResolver`](#reaching-a-module-from-inside-a-rule) below.
 
 For rules you write yourself this is exactly the intended convenience. For rules authored by tenants or end users, either omit the scope entirely — closure resolution is then off and a rule can reach nothing but the entity — or scope a bare engine that has nothing registered on it. Without a scope, a free identifier fails translation with a clear `Unresolved identifier` error rather than silently resolving.
 
 The second half of the boundary is the entity type. Every public property of `T` is reachable, so `u => u.PasswordHash.startsWith('x')` translates just as happily as a rule over business fields. Project to a DTO that carries only what rules are meant to see rather than exposing the persistence entity.
 
-A translated rule is also not resource-bounded the way [`JsSandbox`](/guide/sandbox) is: the predicate runs inside your query, so an expensive one costs database time. Keep the usual query timeouts in place.
+A translated rule is also not resource-bounded the way script execution is: the limits [`Sandboxed()`](/guide/engine#sandboxed-mode) applies bound the *script*, while the predicate runs inside your query, so an expensive one costs database time. Keep the usual query timeouts in place.
 :::
+
+## Reaching a module from inside a rule
+
+A rule passed to a module is **not executed**. It is translated into an expression tree so the filter can run in the database — and during that translation every name in it has to be resolved. The rule's own parameter is obvious; a *free* identifier is not:
+
+```js
+import * as directory from 'directory';
+directory.Find(u => u.Department === directory.Setting('tenantDepartment'));
+//                                   ^^^^^^^^^ free identifier
+```
+
+Resolution looks for a **global**, but `directory` came from an `import` and is therefore module-scoped — invisible to that lookup. Without help, translating this rule fails:
+
+```
+Unresolved identifier 'directory' (pass Engine for closure support)
+```
+
+`TranslationOptions.IdentifierResolver` answers that question. It is consulted before the engine's own lookup, you decide which names it knows, and returning `null` leaves every other name unresolved exactly as before.
+
+This makes it the narrow counterpart to `JsLinqContext.Scope`, which is all-or-nothing: a scope exposes *every* global of an engine to *every* rule. A resolver hands out one object.
+
+```csharp
+public sealed class DirectoryModule(IQueryable<User> users) : IJsModule
+{
+    // Host-controlled lookup: the key is a closed set, not a free path.
+    public string Setting(string key) => key switch
+    {
+        "tenantDepartment" => "sales",
+        _ => throw new ArgumentException($"unknown setting '{key}'")
+    };
+
+    // A JsValue parameter receives the rule itself, unevaluated.
+    public List<UserDto> Find(JsValue rule)
+    {
+        var engine = (rule as Jint.Native.Object.ObjectInstance)?.Engine;
+        var predicate = JsExpressionTranslator.Translate<User, bool>(rule, engine, new TranslationOptions
+        {
+            IdentifierResolver = name => name == "directory" ? this : null
+        });
+
+        return users.Where(u => u.IsActive)      // host-pinned, not rule-controlled
+                    .Where(predicate)
+                    .Select(u => new UserDto { Name = u.Name })
+                    .ToList();
+    }
+}
+```
+
+```js
+import * as directory from 'directory';
+
+// `directory` resolves through IdentifierResolver; the Setting() call does not
+// depend on the row, so it is evaluated once during translation and the provider
+// only ever sees the result:  u => (u.Department == "sales")
+export const names = directory
+    .Find(u => u.Department === directory.Setting('tenantDepartment'))
+    .map(m => m.Name);
+```
+
+Folding is limited to objects the resolver returned, so calls on the queried entity keep the shape the provider expects. An identifier the resolver does not know still fails with `Unresolved identifier` rather than resolving silently, and a resolved object becomes a `ConstantExpression` — the module decides what it hands back.
 
 ## Ordering
 

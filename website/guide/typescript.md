@@ -64,7 +64,7 @@ The embedded TypeScript 6.0 compiler supports all standard TypeScript features:
 | Spread operator | `[...arr1, ...arr2]` |
 | Arrow functions | `const f = (x: number): number => x * 2` |
 
-All type-level constructs (interfaces, type aliases, generics, annotations) are erased during transpilation. Runtime code (enums, classes, functions) is transpiled to ESNext JavaScript -- modern features like `??`, `?.`, and class fields remain as-is without polyfills, since Jint 4.8 supports up to ES2025.
+All type-level constructs (interfaces, type aliases, generics, annotations) are erased during transpilation. Runtime code (enums, classes, functions) is transpiled to ESNext JavaScript -- modern features like `??`, `?.`, and class fields remain as-is without polyfills, since Jint 4.15.3 supports up to ES2025.
 
 ## CLR Constructor Rewriting
 

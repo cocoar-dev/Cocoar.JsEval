@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.0.0] — Untrusted-script hardening: interop restrictions, Jint 4.15.3
+
+**Breaking.** Passing an object to a script grants more than the object — it grants everything reachable from it. `AllowOnly` and `DenyTypes` make that surface a decision instead of a consequence, and `Sandboxed()` locks the runtime down. All three are opt-in. The upgrade to Jint 4.15.3 changes how a script sees a CLR array, which is the only change that can affect existing scripts.
+
+### Added
+
+- **`Sandboxed()`** — strict mode, no `eval`/`Function`, invariant culture/UTC, memory/recursion/stack/array/regex limits, no `GetType()` or reflection, no shared-memory primitives, frozen prototypes. Latches in **both** directions: `EnableFetch()` before or after it throws, so the guarantee never depends on builder order. CLR interop stays on — it hardens the runtime, it does **not** narrow the object graph.
+- **`AllowOnly(a => a.Member(...).Method(...).Type<T>())`** — declares the members a script may reach; everything else stops existing for it, on nested objects and through `Object.keys`, `for..in` and `JSON.stringify` alike. Members are named through expressions, so a rename is a compile error rather than a silently narrower sandbox.
+- **`DenyTypes(params Type[])`** — refuses types outright, checked on the declared *and* the runtime type, so a member declared as `object` cannot smuggle one through. Do not pass `typeof(object)`; it denies everything.
+- **`ConfigureJint(Action<Jint.Options>)`** — reaches Jint options that only apply at construction time, which `RegisterEngineConfigurator` cannot.
+- **`WithMaxJsonDepth(int)`** on `JsEngineOptions` (default 512).
+- **`TranslationOptions.IdentifierResolver`** (Cocoar.JsEval.Linq) — resolves a free identifier in a rule to a host object, which is how a rule reaches an imported module (its binding is module-scoped, while identifier resolution reads globals). A call on a resolved object whose arguments are all constant is folded during translation.
+
+### Changed
+
+- **Jint 4.8.0 → 4.15.3.** A CLR `T[]` is now a live view rather than a copy. Index writes, `sort` and `reverse` reach the underlying array instead of being **silently discarded**; `push` and `length =` throw, because a fixed-size array cannot honour them. `Array.isArray(hostArray)` is now `false`, and `host.Tags === host.Tags` is now `true`. `List<T>` keeps full mutability and is unaffected, as are `map`, `filter`, `join`, `slice`, spread, `for..of`, `Object.keys` and `JSON.stringify`.
+- **Generated `.d.ts`** declares an outbound CLR array as `ClrArray<T>` (helper in `global.d.ts`) so TypeScript rejects `push` instead of allowing it. Inbound parameters stay `T[]`.
+- **A module exception keeps its own message** instead of surfacing as `TargetInvocationException`'s "Exception has been thrown by the target of an invocation".
+
+### Fixed
+
+- **A script could terminate the host process.** Jint's JSON serializer recurses per level, so a ~120-byte script nesting a few thousand objects exhausted the .NET stack and killed the process with an uncatchable `StackOverflowException` — while staying inside every configured limit. `GetValue<T>` and `JsonStringify` now check the shape first and throw `InvalidOperationException`. The guard runs before `ToObject()`, which recurses too; wrapped host objects are exempt so reference identity is preserved.
+- **A module could not accept a `JsValue` parameter.** Every argument went through `ToObject()`, which turns a JS arrow function into a delegate the parameter then rejected — so a module could not receive a rule to translate.
+
+### Migration
+
+Existing code keeps working unchanged. Review scripts only if they *write to* a CLR `T[]`:
+
+```csharp
+// New: decide the reachable surface instead of inheriting it
+services.AddJsEval(b => b
+    .Sandboxed()
+    .AllowOnly(a => a.Member((Customer c) => c.Name))
+    .DenyTypes(typeof(DbContext)));
+```
+
+```js
+// Silently lost before, now takes effect on the host's array:
+host.Tags.sort();
+// Worked before (and lost the write), now throws:
+host.Tags.push('x');
+// Was true before, now false:
+Array.isArray(host.Tags);
+```
+
 ## [4.1.0] — Constructor-pure JsEngine (Wolverine 6 / static-analysis friendly)
 
 `JsEngine` no longer takes `IServiceProvider` directly, and `AddJsEval` now registers both `JsEngine` and `IJsModuleBuilder` **type-based** rather than via opaque lambda factories. Apps on Wolverine 6's strict `ServiceLocationPolicy.NotAllowed` default can inject `JsEngine` into handlers without per-app `AlwaysUseServiceLocationFor<T>` allowlist entries. Consumers using `services.AddJsEval(...)` are unaffected.

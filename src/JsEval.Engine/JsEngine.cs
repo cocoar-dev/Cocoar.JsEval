@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -628,6 +629,16 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
             {
                 if (i < args.Length)
                 {
+                    // A parameter declared as a JsValue wants the value itself,
+                    // not its CLR projection: ToObject() turns a JS function
+                    // into a delegate, which loses the AST a module needs to
+                    // translate a rule into an expression tree.
+                    if (parameters[i].ParameterType.IsInstanceOfType(args[i]))
+                    {
+                        converted[i] = args[i];
+                        continue;
+                    }
+
                     var raw = args[i].ToObject();
                     if (raw is not null && !parameters[i].ParameterType.IsInstanceOfType(raw))
                     {
@@ -645,7 +656,21 @@ TextDecoder.prototype.decode = function(buf) { return __td_decode(buf); };
                             : null;
                 }
             }
-            var result = method.Invoke(instance, converted);
+            object? result;
+            try
+            {
+                result = method.Invoke(instance, converted);
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException is not null)
+            {
+                // Reflection wraps whatever the module threw. Unwrapped, the
+                // script only ever sees "Exception has been thrown by the target
+                // of an invocation" and the module's own validation message —
+                // the reason the call was refused — is lost.
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw; // unreachable
+            }
+
             return result is null ? JsValue.Undefined : JsValue.FromObject(engine, result);
         };
     }

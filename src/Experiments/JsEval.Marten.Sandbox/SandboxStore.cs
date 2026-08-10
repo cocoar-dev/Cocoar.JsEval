@@ -6,7 +6,18 @@ namespace Cocoar.JsEval.Marten.Sandbox;
 
 internal static class SandboxStore
 {
-    public const string ConnString = "Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres";
+    private const string DefaultConnString =
+        "Host=localhost;Port=5433;Username=postgres;Password=postgres;Database=postgres";
+
+    /// <summary>
+    /// Set <c>JSEVAL_PG_CONNSTRING</c> to point the demo at a local Postgres
+    /// whose credentials differ from the plain-Docker default — keeps the
+    /// password out of the repository.
+    /// </summary>
+    public static string ConnString { get; } =
+        Environment.GetEnvironmentVariable("JSEVAL_PG_CONNSTRING") is { Length: > 0 } fromEnv
+            ? fromEnv
+            : DefaultConnString;
 
     public static DocumentStore Create() => DocumentStore.For(opts =>
     {

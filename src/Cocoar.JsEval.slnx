@@ -21,6 +21,7 @@
     <Project Path="Tests/JsEval.Tests.TypeScript/JsEval.Tests.TypeScript.csproj" />
     <Project Path="Tests/JsEval.Tests.Modules/JsEval.Tests.Modules.csproj" />
     <Project Path="Tests/JsEval.Tests.Linq/JsEval.Tests.Linq.csproj" />
+    <Project Path="Tests/JsEval.Tests.Marten/JsEval.Tests.Marten.csproj" />
   </Folder>
   <Folder Name="/Benchmarks/">
     <Project Path="Benchmarks/JsEval.Benchmarks/JsEval.Benchmarks.csproj" />

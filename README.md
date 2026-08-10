@@ -10,7 +10,7 @@ JavaScript/TypeScript execution library for .NET, built on [Jint](https://github
 - JavaScript execution via Jint (ES2025 support)
 - Execution methods: `ExecuteAsync(string)` / `ExecuteAsync(prepared module)` (standard), `Evaluate(string)` / `Evaluate(prepared)`, `EvaluateAsync()`
 - Pre-parsed scripts (`Prepare()` / `PrepareModule()`) for maximum throughput
-- JSON-only `JsSandbox` for untrusted rules with no CLR or module access
+- `Sandboxed()` + `AllowOnly` / `DenyTypes` for untrusted rules with real CLR objects
 - TypeScript 6.0 transpilation with embedded compiler
 - `fetch()` API with opt-in sandboxing
 - Automatic .NET `Task` → JS `Promise` interop
@@ -39,30 +39,28 @@ engine.Evaluate("var greeting = 'Hello, ' + name + '!';");
 var result = engine.GetValue<string>("greeting"); // "Hello, World!"
 ```
 
-### Untrusted Rules (JSON-only Sandbox)
+### Untrusted Rules
 
-`JsSandbox` is deliberately separate from `JsEngine`: it has no modules, CLR
-interop, or underlying-engine escape hatch. Values supplied through `SetValue`
-are always serialized to JSON before they enter a fresh Jint engine.
+Two independent axes, and an untrusted script wants both. `Sandboxed()` governs
+what a script can do *on its own* — strict mode, no `eval`/`Function`, no
+reflection, and memory, recursion, stack, array and regex limits. `AllowOnly`
+and `DenyTypes` govern what it can *reach*: passing an object otherwise grants
+everything reachable from it.
 
 ```csharp
-var sandbox = new JsSandbox();
-
-sandbox.SetValue("customer", customer);
-sandbox.SetValue("context", validationContext);
-
-sandbox.Execute("""
-    customer.Name = customer.Name.trim();
-    customer.IsAdult = customer.Age >= context.MinimumAge;
-    """);
-
-var changed = sandbox.GetValue<Customer>("customer");
+services.AddJsEval(b => b
+    .Sandboxed()                                   // hardens the runtime, latches
+    .AllowOnly(a => a
+        .Member((Customer c) => c.Name)
+        .Member((Customer c) => c.Age))
+    .DenyTypes(typeof(DbContext), typeof(IServiceProvider)));
 ```
 
-JavaScript receives only plain JS values, and `changed` is a newly deserialized
-copy; the original CLR instances and their methods are never exposed. Only the
-explicitly named JSON values persist between executions; all other globals and
-prototype changes are discarded with the engine.
+`Sandboxed()` latches in both directions — `EnableFetch()` before or after it
+throws — so the guarantee never depends on the order the builder is written in.
+It hardens the runtime but does **not** narrow the object graph; that is what
+`AllowOnly` is for. Isolation between scripts is the engine instance: resolve a
+separate engine per script source.
 
 ### With ES Modules
 
@@ -146,7 +144,7 @@ const data = await loadData('item-123'); // .NET Task becomes a Promise
 | `Evaluate(JsPreparedScript)` | No | No | Yes | Max performance -- pre-parsed, reusable, no module system |
 | `EvaluateAsync(string)` | No | Yes | No | Lightweight async -- no modules but needs await |
 
-`ExecuteAsync` is the **default/standard** method for trusted integration scripts and provides the full module system. For tenant- or end-user-authored rules, use `JsSandbox`. `Evaluate` is a lightweight execution mode for scripts you control and know do not need modules.
+`ExecuteAsync` is the **default/standard** method for trusted integration scripts and provides the full module system. For tenant- or end-user-authored rules, resolve a `Sandboxed()` engine with an `AllowOnly` surface. `Evaluate` is a lightweight execution mode for scripts you control and know do not need modules.
 
 ## Packages
 

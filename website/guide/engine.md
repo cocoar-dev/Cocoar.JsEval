@@ -170,7 +170,9 @@ export function greet(name) { return `Hello, ${name}!`; }
 // Execute many times
 var engine = serviceProvider.GetRequiredService<JsEngine>();
 await engine.ExecuteAsync(preparedModule);
-var result = engine.InvokeFunction<string>("greet", "World"); // "Hello, World!"
+// InvokeFunction returns the raw Jint.Native.JsValue, boxed as object --
+// it is not a CLR string, so convert rather than cast.
+var result = engine.InvokeFunction("greet", "World").ToString(); // "Hello, World!"
 ```
 
 ::: tip
@@ -232,10 +234,10 @@ export function add(a, b) {
 // Get function metadata
 var func = engine.GetFunction("add");
 Console.WriteLine(func.Name);           // "add"
-Console.WriteLine(func.Parameters.Count); // 2
+Console.WriteLine(func.ParameterNames.Count); // 2
 
-// Invoke
-var result = engine.InvokeFunction("add", 10, 20); // 30
+// Invoke -- the result is a JsValue, so convert it to the CLR type you want
+var result = Convert.ToDouble(engine.InvokeFunction("add", 10, 20)); // 30
 ```
 
 ## Async / Await
@@ -283,6 +285,62 @@ services.AddJsEval(b => b
 ```javascript
 const dt = NewObject('MyDomainType');
 ```
+
+### Arrays and lists
+
+A CLR array reaches a script as a **live view**, not a copy: what a script writes
+lands in the host's array. The two operations a fixed-size array cannot honour
+throw instead of failing quietly.
+
+```csharp
+engine.SetValue("host", host);   // host.Tags is a string[] { "a", "b", "c" }
+```
+
+| In JavaScript | Result on a `T[]` |
+|---|---|
+| `host.Tags[0] = 'z'` | writes through to the CLR array |
+| `host.Tags.sort()`, `.reverse()` | write through |
+| `host.Tags.push('d')` | **throws** — the array keeps its length and contents |
+| `host.Tags.length = 1` | **throws** — unchanged |
+| `Array.isArray(host.Tags)` | `false` — it is array-*like*, not a JS `Array` |
+| `host.Tags === host.Tags` | `true` — the same wrapper each time |
+| `map`, `filter`, `join`, `slice`, spread, `for..of`, `Object.keys`, `JSON.stringify` | work as expected |
+
+A `List<T>` can grow, so `push` and index writes both work and reach the host's
+list. Note that `Array.isArray` returns `false` for a `List<T>` as well — no
+wrapped CLR collection is a real JS `Array`.
+
+#### Getting a real JS array
+
+When a script should work with the data rather than with the host's storage, copy
+it once. The wrapper is both iterable and array-like, so every usual route works
+and each of them yields a genuine JS array (`Array.isArray` is then `true`):
+
+```js
+const tags = [...host.Tags];              // recommended
+const tags2 = Array.from(host.Tags);      // equivalent
+const upper = Array.from(host.Tags, x => x.toUpperCase()); // copy + map in one pass
+```
+
+`slice()`, `map()` and `Array.prototype.slice.call(...)` do the same, and all of
+this applies to `List<T>` as well. The copy is independent: `push` works on it,
+and sorting or reordering it leaves the host's collection untouched — so write the
+result back explicitly if the host is meant to see it.
+
+This is also the clean fix for a script that branches on `Array.isArray`: copy
+first, and the answer no longer depends on whether the value came from the host.
+
+::: warning Changed in 5.0.0
+Before the Jint 4.15.3 upgrade, a `T[]` crossed as a copy: index writes, `sort`,
+`reverse` and `push` all *appeared* to succeed and none of them reached the CLR
+array. Scripts that mutate a host array in place now take effect — or throw.
+`Array.isArray` also flipped from `true` to `false`. Building a new array
+(`[...host.Tags, 'd']`) was and remains unaffected.
+:::
+
+Generated `.d.ts` declares an outbound array as `ClrArray<T>`, so TypeScript
+rejects `push` at compile time instead of letting it fail at runtime. Parameters
+a script passes *in* stay `T[]` — an ordinary JS array is fine there.
 
 ## Restricting what a script can reach
 

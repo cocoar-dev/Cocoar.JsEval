@@ -7,6 +7,10 @@ benchmark results and guidance for choosing the right execution method.
 All measurements on Windows 11 ARM64, .NET 10.0.6, Jint 4.8, Release build,
 BenchmarkDotNet 0.14. Numbers are arithmetic means after warm-up. Use the numbers
 for **relative comparison** — absolute timings on x64 server hardware will differ.
+
+These figures were measured on Jint 4.8 and have **not** been re-run against the
+4.15.3 upgrade in 5.0.0. Treat the relative ordering of the execution methods as
+current and the absolute numbers as indicative.
 :::
 
 ## Engine Benchmarks
