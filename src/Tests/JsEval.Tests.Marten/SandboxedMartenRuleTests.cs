@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Cocoar.JsEval;
 using Cocoar.JsEval.Engine;
 using Cocoar.JsEval.Linq;
+using Jint;
 using Jint.Native;
 using Marten;
 using Microsoft.Extensions.DependencyInjection;
@@ -292,25 +293,24 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
     }
 
     // ---------------------------------------------------------------------
-    // Async terminals: the case Marten 9 forces
+    // Async terminals are the host's job, not the library's
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// Marten 9 refuses synchronous execution, so <c>count</c>, <c>any</c> and
-    /// <c>find</c> throw on it. Their async counterparts locate Marten's own
-    /// <c>CountAsync</c>/<c>AnyAsync</c>/<c>FirstOrDefaultAsync</c> at runtime,
-    /// which is what makes `await users.countAsync(...)` in a script the exact
-    /// mirror of `await query.CountAsync()` in C#.
+    /// Marten 9 permits asynchronous data access only, so the built-in
+    /// <c>count</c>/<c>any</c>/<c>find</c> throw on it. A host closes that gap
+    /// itself, in about ten lines, and the script then awaits them exactly as
+    /// C# awaits <c>query.CountAsync()</c>.
     /// </summary>
     [Fact(SkipUnless = nameof(DatabaseAvailable), Skip = "requires a local PostgreSQL")]
-    public async Task AsyncTerminals_WorkAgainstMarten_WhereSynchronousOnesRefuse()
+    public async Task HostSuppliedAsyncTerminals_WorkWhereTheSynchronousOnesRefuse()
     {
-        // A plain engine with the LINQ extensions: this test is about the async
-        // terminals against a real provider, not about the sandbox surface, and
-        // it hands the script the entity queryable directly.
         var sc = new ServiceCollection();
-        sc.AddJsEval(b => b.AddLinq());
+        sc.AddJsEval(b => b
+            .AddLinq()
+            .AddExtensionMethods(typeof(MartenTerminals)));
         using var engine = sc.BuildServiceProvider().GetRequiredService<JsEngine>();
+
         await using (var session = _store!.LightweightSession())
         {
             engine.SetValue("users", session.Query<User>());
@@ -328,7 +328,7 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
                 Assert.True(engine.GetValue<bool>("anyOld"));
                 Assert.Equal("sales", engine.GetValue<string>("caraDept"));
 
-                // The synchronous counterpart is what Marten 9 rejects.
+                // The built-in synchronous counterpart is what Marten 9 rejects.
                 var ex = Assert.ThrowsAny<Exception>(
                     () => engine.EvaluateExpression("users.count(u => u.IsActive)"));
                 Assert.Contains("asynchronous", Flatten(ex), StringComparison.OrdinalIgnoreCase);
@@ -343,4 +343,29 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
             text.Append(e.Message).Append(" | ");
         return text.ToString();
     }
+}
+
+/// <summary>
+/// A host's own provider-specific terminal operations. `Cocoar.JsEval.Linq`
+/// deliberately ships no async counterparts to <c>count</c>/<c>any</c>/
+/// <c>find</c> — that would mean depending on a provider or guessing at one.
+/// Everything needed to write them lives in the public API, and this is the
+/// shape the LINQ guide documents.
+/// </summary>
+public static class MartenTerminals
+{
+    public static Task<int> CountAsync<T>(this IQueryable<T> source, JsValue predicate) =>
+        Filtered(source, predicate).CountAsync();
+
+    public static Task<bool> AnyAsync<T>(this IQueryable<T> source, JsValue predicate) =>
+        Filtered(source, predicate).AnyAsync();
+
+    public static Task<T> FindAsync<T>(this IQueryable<T> source, JsValue predicate) =>
+        Filtered(source, predicate).FirstOrDefaultAsync();
+
+    private static IQueryable<T> Filtered<T>(IQueryable<T> source, JsValue predicate) =>
+        predicate.IsNull() || predicate.IsUndefined()
+            ? source
+            : source.Where(JsExpressionTranslator.Translate<T, bool>(
+                predicate, JsLinqContext.CurrentEngine, JsLinqContext.CurrentOptions));
 }

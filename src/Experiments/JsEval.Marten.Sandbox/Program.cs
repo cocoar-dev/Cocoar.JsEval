@@ -60,12 +60,12 @@ await Run("1. JS -> Expression -> Marten: SQL byte-identical to C# source lambda
             catch (Exception ex) { Console.WriteLine($"\n{label} -> REFUSED: {ex.Message.Split('\n')[0]}"); }
         }
 
-        var active = await JsLinqExtensions.CountAsync(session.Query<User>(), JsValue.Null);
-        Console.WriteLine($"\nusers.countAsync(null)             [async] -> {active}");
-
-        var bob = await JsLinqExtensions.FindAsync(
-            session.Query<User>().Where(u => u.Name == "Bob"), JsValue.Null);
-        Console.WriteLine($"users.findAsync(...)               [async] -> {bob?.Name} (age={bob?.Age})");
+        // The library ships no async counterparts on purpose -- it is not tied to
+        // any provider. A host that wants them from script writes its own and
+        // registers them with AddExtensionMethods; see the LINQ guide. On the C#
+        // side it is simply Marten's own method:
+        var active = await session.Query<User>().Where(u => u.IsActive).CountAsync();
+        Console.WriteLine($"\nhost-side CountAsync()            [async] -> {active}");
     }
 });
 

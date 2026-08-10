@@ -14,7 +14,6 @@ All notable changes to this project will be documented in this file.
 - **`ConfigureJint(Action<Jint.Options>)`** — reaches Jint options that only apply at construction time, which `RegisterEngineConfigurator` cannot.
 - **`WithMaxJsonDepth(int)`** on `JsEngineOptions` (default 512).
 - **`TranslationOptions.IdentifierResolver`** (Cocoar.JsEval.Linq) — resolves a free identifier in a rule to a host object, which is how a rule reaches an imported module (its binding is module-scoped, while identifier resolution reads globals). A call on a resolved object whose arguments are all constant is folded during translation.
-- **`countAsync` / `anyAsync` / `findAsync`** (Cocoar.JsEval.Linq) — asynchronous counterparts to the terminal `count` / `any` / `find`, returning a promise a script awaits: `await users.countAsync(u => u.IsActive)`. Required by providers that forbid synchronous execution — **Marten 9 throws `NotSupportedException` on the synchronous three**. The provider's own `CountAsync` / `AnyAsync` / `FirstOrDefaultAsync` is located at runtime, so no provider package is referenced and anything without one keeps using the synchronous call. Pass `null` for "no predicate"; there is deliberately no parameterless overload, since it would outrank the provider's own method in ordinary C#.
 
 ### Changed
 
@@ -27,6 +26,10 @@ All notable changes to this project will be documented in this file.
 - **`Scriban` 7.1.0 → 7.2.6** (`Cocoar.JsEval.Module.Template`) and **`AngleSharp` 1.4.0 → 1.7.1** (`Cocoar.JsEval.Module.AngleSharp`) — both shipped versions carried published advisories (Scriban 2× high / 2× moderate, AngleSharp 1× moderate). Consumers of those two module packages get the updated dependency transitively.
 - Microsoft.Extensions.* and the SQLite/EF packages moved to 10.0.10, `Microsoft.SourceLink.GitHub` to 10.0.301. `Marten` 8.33.0 → 9.11.0 and a `SQLitePCLRaw` pin affect only the test and experiment projects, which are not packaged. The solution now builds with no vulnerability warnings.
 
+
+### Known limitation
+
+- **`count`, `find` and `any` require a provider that permits synchronous execution.** They are terminal and execute the query where they stand, because a JavaScript expression has to return a value. **Marten 9 permits asynchronous data access only** and throws `NotSupportedException` on all three; `where`, `orderBy` and `thenBy` are lazy and unaffected, as are EF Core, LINQ2DB, in-memory queryables and Marten 8. JsEval ships no async counterparts on purpose — that would tie a provider-neutral library to one provider. The [LINQ guide](/guide/linq) shows the ten lines a host adds for its own provider, and the build-in-JS, terminate-in-C# alternative.
 ### Fixed
 
 - **A script could terminate the host process.** Jint's JSON serializer recurses per level, so a ~120-byte script nesting a few thousand objects exhausted the .NET stack and killed the process with an uncatchable `StackOverflowException` — while staying inside every configured limit. `GetValue<T>` and `JsonStringify` now check the shape first and throw `InvalidOperationException`. The guard runs before `ToObject()`, which recurses too; wrapped host objects are exempt so reference identity is preserved.

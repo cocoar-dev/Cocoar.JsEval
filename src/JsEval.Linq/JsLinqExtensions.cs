@@ -26,40 +26,14 @@ public static class JsLinqExtensions
     public static bool Any<T>(this IQueryable<T> source, JsValue predicate) =>
         IsMissing(predicate) ? source.Any() : source.Any(Translate<T>(predicate));
 
-    // --- Asynchronous terminals ---
-    //
-    // A JavaScript expression has to produce a value, so the synchronous
-    // terminals above execute the query then and there. Marten 9 refuses that:
-    // it permits asynchronous data access only. These return a Task, which the
-    // engine surfaces to the script as a promise, so a rule writes
-    // `await users.countAsync(...)` exactly as C# writes `await CountAsync()`.
-    //
-    // The provider's own async terminal is located at runtime; providers without
-    // one fall back to the synchronous call, so behaviour is unchanged there.
-
-    // Every one of these takes the JsValue predicate, with no parameterless
-    // overload — deliberately. A parameterless `CountAsync<T>(IQueryable<T>)`
-    // here would be a *better* overload than the provider's own
-    // `CountAsync<T>(IQueryable<T>, CancellationToken = default)`, so ordinary
-    // C# in a file that has both `using Cocoar.JsEval.Linq` and `using Marten`
-    // would silently bind to this one instead of Marten's. Pass `null` from a
-    // script to mean "no predicate": `users.countAsync(null)`.
-
-    /// <inheritdoc cref="Count{T}(IQueryable{T}, JsValue)"/>
-    public static Task<int> CountAsync<T>(this IQueryable<T> source, JsValue predicate) =>
-        AsyncQueryableBridge.InvokeAsync(Filtered(source, predicate), "CountAsync", static q => q.Count());
-
-    /// <inheritdoc cref="Any{T}(IQueryable{T}, JsValue)"/>
-    public static Task<bool> AnyAsync<T>(this IQueryable<T> source, JsValue predicate) =>
-        AsyncQueryableBridge.InvokeAsync(Filtered(source, predicate), "AnyAsync", static q => q.Any());
-
-    /// <inheritdoc cref="Find{T}(IQueryable{T}, JsValue)"/>
-    public static Task<T?> FindAsync<T>(this IQueryable<T> source, JsValue predicate) =>
-        AsyncQueryableBridge.InvokeAsync(
-            Filtered(source, predicate), "FirstOrDefaultAsync", static q => q.FirstOrDefault());
-
-    private static IQueryable<T> Filtered<T>(IQueryable<T> source, JsValue predicate) =>
-        IsMissing(predicate) ? source : source.Where(Translate<T>(predicate));
+    // No async counterparts here on purpose. `Count`, `Find` and `Any` execute
+    // the query where they stand, and a provider may refuse that — Marten 9
+    // permits asynchronous data access only. Supplying `CountAsync` and friends
+    // would mean either taking a dependency on a provider or guessing at one
+    // reflectively, and neither belongs in a provider-neutral library. A host
+    // that needs them writes them for its own provider and registers them with
+    // `AddExtensionMethods(typeof(...))`; `Translate` below is public for
+    // exactly that. See the LINQ guide.
 
     // --- Ordering ---
 

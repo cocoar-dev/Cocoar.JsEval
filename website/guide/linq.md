@@ -177,35 +177,61 @@ users.any(u => u.Age > 100)           // -> EXISTS query
 Everything here is pure JS semantics. TypeScript is optional — it gives you IntelliSense at dev-time (via `.d.ts`), but the translator sees only JS. Scripts authored in plain `.js` work identically.
 :::
 
-### Terminal operations: `count` / `find` / `any` and their async twins
+### Terminal operations and providers that require async
 
-`where`, `orderBy` and `thenBy` are lazy — they only build the query. The three **terminal** operations execute it:
+`where`, `orderBy` and `thenBy` are lazy — they only build the query, and the host materialises it on the C# side. `count`, `find` and `any` are **terminal**: they execute the query then and there, synchronously, because a JavaScript expression has to return a value.
 
-```js
-users.count(u => u.IsActive)          // executes synchronously
-await users.countAsync(u => u.IsActive)   // executes asynchronously
+Some providers refuse that. **Marten 9 permits asynchronous data access only**, so those three throw `NotSupportedException: As of Marten 9.0, only asynchronous data access is supported`. EF Core, LINQ2DB, in-memory `IQueryable` and Marten 8 are unaffected.
+
+JsEval ships no `countAsync`/`anyAsync`/`findAsync`, because that would mean either depending on a provider or guessing at one reflectively, and the library is deliberately provider-neutral. Everything needed to add them is public, so a host writes the handful of lines for *its* provider:
+
+```csharp
+public static class MartenTerminals
+{
+    public static Task<int> CountAsync<T>(this IQueryable<T> source, JsValue predicate) =>
+        Filtered(source, predicate).CountAsync();
+
+    public static Task<bool> AnyAsync<T>(this IQueryable<T> source, JsValue predicate) =>
+        Filtered(source, predicate).AnyAsync();
+
+    public static Task<T> FindAsync<T>(this IQueryable<T> source, JsValue predicate) =>
+        Filtered(source, predicate).FirstOrDefaultAsync();
+
+    private static IQueryable<T> Filtered<T>(IQueryable<T> source, JsValue predicate) =>
+        predicate.IsNull() || predicate.IsUndefined()
+            ? source
+            : source.Where(JsExpressionTranslator.Translate<T, bool>(
+                predicate, JsLinqContext.CurrentEngine, JsLinqContext.CurrentOptions));
+}
 ```
 
-Each has an `…Async` counterpart — `countAsync`, `anyAsync`, `findAsync` — that returns a promise, so a script awaits it exactly as C# awaits `query.CountAsync()`.
+```csharp
+services.AddJsEval(b => b
+    .AddLinq()
+    .AddExtensionMethods(typeof(MartenTerminals)));   // static class -> pass the Type
+```
 
-Use the async form when the provider forbids synchronous execution. **Marten 9 does**: `count`, `find` and `any` throw `NotSupportedException: As of Marten 9.0, only asynchronous data access is supported`, while their async twins work. EF Core, LINQ2DB, in-memory `IQueryable` and Marten 8 permit both.
-
-There is no parameterless overload — pass `null` to mean "no predicate":
+A script then awaits them exactly as C# awaits `query.CountAsync()`:
 
 ```js
-export const total  = await users.countAsync(null);
 export const active = await users.countAsync(u => u.IsActive);
-export const bob    = await users.findAsync(u => u.Name === 'Bob');
+const cara          = await users.findAsync(u => u.Name === 'Cara');
+export const total  = await users.countAsync(null);   // null = no predicate
 ```
 
-::: details Why `null` rather than no argument
-A parameterless `CountAsync<T>(IQueryable<T>)` would be a *better* overload than a provider's own `CountAsync<T>(IQueryable<T>, CancellationToken = default)`. Ordinary C# in a file with both `using Cocoar.JsEval.Linq` and `using Marten` would then silently bind to ours instead of Marten's. The predicate parameter keeps the signatures distinct.
-:::
+Give the predicate parameter no default and add no parameterless overload: a parameterless `CountAsync<T>(IQueryable<T>)` is a *better* overload than the provider's own `CountAsync<T>(IQueryable<T>, CancellationToken = default)`, so ordinary C# in the same file would bind to yours instead of the provider's.
 
-The async form locates the provider's own `CountAsync` / `AnyAsync` / `FirstOrDefaultAsync` at runtime — no provider package is referenced. Where none exists, it falls back to the synchronous call, so behaviour on in-memory queryables is unchanged.
+The alternative, if you would rather not add anything: build the query in JS and terminate it in C#.
+
+```js
+export const query = users.where(u => u.IsActive);
+```
+```csharp
+var count = await engine.GetValue<IQueryable<User>>("query")!.CountAsync();
+```
 
 ::: warning Ordering after `where` drops the terminals
-`users.where(...).orderBy(...)` yields an object with no `find`/`count`/`any` on it at all — the async ones included. Either alone (`users.where(...).count(...)`, `users.orderBy(...).findAsync(...)`) works. This is a pre-existing limitation of the extension-method binding, not specific to the async additions.
+`users.where(...).orderBy(...)` yields an object with no `find`/`count`/`any` on it at all. Either alone — `users.where(...).count(...)` or `users.orderBy(...).find(...)` — works. A limitation of the extension-method binding.
 :::
 
 ## How it works
