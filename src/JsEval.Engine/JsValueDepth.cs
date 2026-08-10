@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using Jint.Native;
 using Jint.Native.Object;
 using Jint.Runtime.Descriptors;
-using JsFunction = Jint.Native.Function.Function;
+// Aliased as JintFunction, not JsFunction: Cocoar.JsEval.JsFunction is a
+// different type, and naming the alias after it made `is JsFunction` bind to
+// that one instead — a check that can never match, which the compiler reported
+// as CS0184 and which silently stopped functions from being skipped below.
+using JintFunction = Jint.Native.Function.Function;
 
 namespace Cocoar.JsEval.Engine;
 
@@ -31,7 +35,7 @@ internal static class JsValueDepth
     /// </summary>
     public static bool Exceeds(JsValue root, int maxDepth)
     {
-        if (root is not ObjectInstance rootObject || root is JsFunction)
+        if (root is not ObjectInstance rootObject || root is JintFunction)
             return false;
 
         var frames = new Stack<Frame>();
@@ -51,7 +55,7 @@ internal static class JsValueDepth
             if (descriptor.Get is not null || descriptor.Set is not null)
                 continue;
 
-            if (descriptor.Value is not ObjectInstance child || descriptor.Value is JsFunction)
+            if (descriptor.Value is not ObjectInstance child || descriptor.Value is JintFunction)
                 continue;
 
             if (IsOnCurrentPath(frames, child))

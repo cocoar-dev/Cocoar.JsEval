@@ -21,6 +21,11 @@ All notable changes to this project will be documented in this file.
 - **Generated `.d.ts`** declares an outbound CLR array as `ClrArray<T>` (helper in `global.d.ts`) so TypeScript rejects `push` instead of allowing it. Inbound parameters stay `T[]`.
 - **A module exception keeps its own message** instead of surfacing as `TargetInvocationException`'s "Exception has been thrown by the target of an invocation".
 
+### Security
+
+- **`Scriban` 7.1.0 → 7.2.6** (`Cocoar.JsEval.Module.Template`) and **`AngleSharp` 1.4.0 → 1.7.1** (`Cocoar.JsEval.Module.AngleSharp`) — both shipped versions carried published advisories (Scriban 2× high / 2× moderate, AngleSharp 1× moderate). Consumers of those two module packages get the updated dependency transitively.
+- Microsoft.Extensions.* and the SQLite/EF packages moved to 10.0.10, `Microsoft.SourceLink.GitHub` to 10.0.301. `Marten` 8.33.0 → 8.37.4 (the release that patches it; Marten 9 allows async data access only) and a `SQLitePCLRaw` pin affect only the test and experiment projects, which are not packaged. The solution now builds with no vulnerability warnings.
+
 ### Fixed
 
 - **A script could terminate the host process.** Jint's JSON serializer recurses per level, so a ~120-byte script nesting a few thousand objects exhausted the .NET stack and killed the process with an uncatchable `StackOverflowException` — while staying inside every configured limit. `GetValue<T>` and `JsonStringify` now check the shape first and throw `InvalidOperationException`. The guard runs before `ToObject()`, which recurses too; wrapped host objects are exempt so reference identity is preserved.

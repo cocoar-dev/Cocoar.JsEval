@@ -43,7 +43,7 @@ public sealed class TsTranspiler
     /// JS-level recursion costs roughly 10× more .NET stack frames than direct
     /// .NET recursion, so deeply nested input (e.g. 300+ chained ternaries)
     /// exhausts the thread stack and crashes the host process with an
-    /// unrecoverable <see cref="StackOverflowException"/>. The pre-parse depth
+    /// unrecoverable <see cref="System.StackOverflowException"/>. The pre-parse depth
     /// scan rejects such input with a controlled exception instead.
     /// </para>
     /// <para>

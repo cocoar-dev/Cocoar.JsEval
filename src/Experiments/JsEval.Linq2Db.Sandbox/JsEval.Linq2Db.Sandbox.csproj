@@ -12,6 +12,8 @@
   <ItemGroup>
     <PackageReference Include="linq2db" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <!-- Lifts the transitive SQLitePCLRaw off the version carrying GHSA-2m69-gcr7-jv3q. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
 
   <ItemGroup>

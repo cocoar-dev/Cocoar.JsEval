@@ -97,4 +97,25 @@ public class JsonDepthGuardTests
 
         Assert.Contains("\"i\":4999", json, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void FunctionValuedProperties_AreSkippedRatherThanWalked()
+    {
+        // JSON.stringify omits functions, so the guard skips them — which also
+        // keeps the walk out of the prototype/constructor chain every function
+        // object carries. That skip once bound to the wrong type and silently
+        // did nothing, so a shallow object with methods was measured through its
+        // functions instead. A tight limit makes the difference observable.
+        using var engine = CreateEngine();
+        engine.Options.WithMaxJsonDepth(2);
+        engine.Evaluate("var data = { a: 1, fn: function (x) { return x; } };");
+
+        // Depth 2 is generous for `{ a, fn }` but far too tight for the chain
+        // hanging off `fn` (prototype -> constructor -> ...), so this only
+        // succeeds while functions are genuinely skipped.
+        var json = engine.JsonStringify(engine.EvaluateExpression("data"));
+
+        Assert.Contains("\"a\":1", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("fn", json, StringComparison.Ordinal);
+    }
 }
