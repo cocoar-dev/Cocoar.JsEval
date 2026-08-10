@@ -40,7 +40,7 @@ public static class DiscriminatorMappingScenario
         Console.WriteLine();
     }
 
-    public static void Run(IDocumentSession session)
+    public static async Task Run(IDocumentSession session)
     {
         var engine = new Jint.Engine();
         engine.SetValue("Type", new JsTypeGlobal(Mappings, new Dictionary<string, Type>(), []));
@@ -63,7 +63,7 @@ public static class DiscriminatorMappingScenario
         var expr  = JsExpressionTranslator.Translate<Participant, bool>(jsFn, engine, TranslationOpts);
         Console.WriteLine($"  Expression : {expr}");
         SandboxStore.PrintSql(session.Query<Participant>().Where(expr));
-        var persons = session.Query<Participant>().Where(expr).ToList();
+        var persons = await session.Query<Participant>().Where(expr).ToListAsync();
         Console.WriteLine($"  Rows ({persons.Count}): {string.Join(", ", persons.Select(p => p.Name))}");
 
         // ── 3. LINQ: Type.IsOneOf → Marten SQL ──────────────────────────────
@@ -72,7 +72,7 @@ public static class DiscriminatorMappingScenario
         var exprOneOf = JsExpressionTranslator.Translate<Participant, bool>(jsFnOneOf, engine, TranslationOpts);
         Console.WriteLine($"  Expression : {exprOneOf}");
         SandboxStore.PrintSql(session.Query<Participant>().Where(exprOneOf));
-        var all = session.Query<Participant>().Where(exprOneOf).ToList();
+        var all = await session.Query<Participant>().Where(exprOneOf).ToListAsync();
         Console.WriteLine($"  Rows ({all.Count}): {string.Join(", ", all.Select(p => p.Name))}");
 
         // ── 4. LINQ: AND-narrowing ───────────────────────────────────────────
@@ -81,7 +81,7 @@ public static class DiscriminatorMappingScenario
         var exprAnd = JsExpressionTranslator.Translate<Participant, bool>(jsFnAnd, engine, TranslationOpts);
         Console.WriteLine($"  Expression : {exprAnd}");
         SandboxStore.PrintSql(session.Query<Participant>().Where(exprAnd));
-        var filtered = session.Query<Participant>().Where(exprAnd).ToList();
+        var filtered = await session.Query<Participant>().Where(exprAnd).ToListAsync();
         Console.WriteLine($"  Rows ({filtered.Count}): {string.Join(", ", filtered.Select(p => p.Name))}");
 
         // ── 5. LINQ: IsOneOf AND ─────────────────────────────────────────────
@@ -90,7 +90,7 @@ public static class DiscriminatorMappingScenario
         var exprOneOfAnd = JsExpressionTranslator.Translate<Participant, bool>(jsFnOneOfAnd, engine, TranslationOpts);
         Console.WriteLine($"  Expression : {exprOneOfAnd}");
         SandboxStore.PrintSql(session.Query<Participant>().Where(exprOneOfAnd));
-        var filteredOneOf = session.Query<Participant>().Where(exprOneOfAnd).ToList();
+        var filteredOneOf = await session.Query<Participant>().Where(exprOneOfAnd).ToListAsync();
         Console.WriteLine($"  Rows ({filteredOneOf.Count}): {string.Join(", ", filteredOneOf.Select(p => p.Name))}");
 
         // ── 6. OR + AND intersection narrowing ───────────────────────────────
@@ -106,7 +106,7 @@ public static class DiscriminatorMappingScenario
             var exprIntersect = JsExpressionTranslator.Translate<Participant, bool>(jsFnIntersect, engine, TranslationOpts);
             Console.WriteLine($"  Expression : {exprIntersect}");
             SandboxStore.PrintSql(session.Query<Participant>().Where(exprIntersect));
-            var intersected = session.Query<Participant>().Where(exprIntersect).ToList();
+            var intersected = await session.Query<Participant>().Where(exprIntersect).ToListAsync();
             Console.WriteLine($"  Rows ({intersected.Count}): {string.Join(", ", intersected.Select(p => p.Name))}");
             Console.WriteLine($"  service-account in result: {intersected.Any(p => p.ParticipantType == "service-account")} (expected: false)");
         }

@@ -24,7 +24,11 @@ All notable changes to this project will be documented in this file.
 ### Security
 
 - **`Scriban` 7.1.0 → 7.2.6** (`Cocoar.JsEval.Module.Template`) and **`AngleSharp` 1.4.0 → 1.7.1** (`Cocoar.JsEval.Module.AngleSharp`) — both shipped versions carried published advisories (Scriban 2× high / 2× moderate, AngleSharp 1× moderate). Consumers of those two module packages get the updated dependency transitively.
-- Microsoft.Extensions.* and the SQLite/EF packages moved to 10.0.10, `Microsoft.SourceLink.GitHub` to 10.0.301. `Marten` 8.33.0 → 8.37.4 (the release that patches it; Marten 9 allows async data access only) and a `SQLitePCLRaw` pin affect only the test and experiment projects, which are not packaged. The solution now builds with no vulnerability warnings.
+- Microsoft.Extensions.* and the SQLite/EF packages moved to 10.0.10, `Microsoft.SourceLink.GitHub` to 10.0.301. `Marten` 8.33.0 → 9.11.0 and a `SQLitePCLRaw` pin affect only the test and experiment projects, which are not packaged. The solution now builds with no vulnerability warnings.
+
+### Known limitation
+
+- **`count`, `find` and `any` do not work on Marten 9.** These three `JsLinqExtensions` methods are terminal and execute synchronously, because a JavaScript expression has to return a value. Marten 9 permits asynchronous data access only and throws `NotSupportedException`. `where`, `orderBy` and `thenBy` are lazy and unaffected, as is Marten 8 and every provider that allows synchronous execution (EF Core, LINQ2DB, in-memory). Build the query in JS and terminate it in C# — see the [LINQ guide](/guide/linq).
 
 ### Fixed
 

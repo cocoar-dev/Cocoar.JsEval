@@ -60,7 +60,12 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
             _ => throw new ArgumentException($"unknown setting '{key}'")
         };
 
-        public List<UserDto> Find(JsValue rule)
+        /// <summary>
+        /// Returns a <see cref="Task{T}"/>, so the script awaits it. Marten 9
+        /// permits asynchronous data access only — a synchronous
+        /// <c>ToList()</c> here throws <c>NotSupportedException</c>.
+        /// </summary>
+        public async Task<IReadOnlyList<UserDto>> Find(JsValue rule)
         {
             var jintEngine = (rule as Jint.Native.Object.ObjectInstance)?.Engine;
             var predicate = JsExpressionTranslator.Translate<User, bool>(rule, jintEngine, new TranslationOptions
@@ -75,9 +80,9 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
 
             LastSql = query.ToCommand().CommandText;
 
-            return query
+            return await query
                 .Select(u => new UserDto { Name = u.Name, Department = u.Department })
-                .ToList();
+                .ToListAsync();
         }
     }
 
@@ -127,9 +132,8 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
 
             await engine.ExecuteAsync("""
                 import * as directory from 'directory';
-                export const names = directory
-                    .Find(u => u.Department === 'eng' && u.Age >= 18)
-                    .map(m => m.Name);
+                const matches = await directory.Find(u => u.Department === 'eng' && u.Age >= 18);
+                export const names = matches.map(m => m.Name);
                 """);
 
             Assert.Equal(baselineSql, Module(engine).LastSql);
@@ -146,7 +150,7 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
         {
             await engine.ExecuteAsync("""
                 import * as directory from 'directory';
-                export const names = directory.Find(u => u.Age > 40).map(m => m.Name);
+                export const names = (await directory.Find(u => u.Age > 40)).map(m => m.Name);
                 """);
 
             var sql = Module(engine).LastSql!;
@@ -171,7 +175,7 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
             // and it does so inside the query rather than afterwards.
             await engine.ExecuteAsync("""
                 import * as directory from 'directory';
-                export const names = directory.Find(u => u.Department === 'eng').map(m => m.Name);
+                export const names = (await directory.Find(u => u.Department === 'eng')).map(m => m.Name);
                 """);
 
             Assert.Equal(["Alice", "Bob"], engine.GetValue<string[]>("names")!.OrderBy(n => n).ToArray());
@@ -188,9 +192,8 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
         {
             await engine.ExecuteAsync("""
                 import * as directory from 'directory';
-                export const names = directory
-                    .Find(u => u.Department === directory.Setting('tenantDepartment'))
-                    .map(m => m.Name);
+                const matches = await directory.Find(u => u.Department === directory.Setting('tenantDepartment'));
+                export const names = matches.map(m => m.Name);
                 """);
 
             Assert.Equal(["Cara"], engine.GetValue<string[]>("names")!);
@@ -214,7 +217,7 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
         {
             await engine.ExecuteAsync("""
                 import * as directory from 'directory';
-                const first = directory.Find(u => u.Age > 18)[0];
+                const first = (await directory.Find(u => u.Age > 18))[0];
                 export const probe = first.Name + '|' + typeof first.PasswordHash + '|' + typeof first.Id;
                 """);
 
@@ -253,7 +256,7 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
         {
             var ex = await Assert.ThrowsAnyAsync<Exception>(() => engine.ExecuteAsync("""
                 import * as directory from 'directory';
-                export const never = directory.Find(u => u.Department === directory.Setting('../../etc/passwd'));
+                export const never = await directory.Find(u => u.Department === directory.Setting('../../etc/passwd'));
                 """));
 
             Assert.Contains("unknown setting", Flatten(ex), StringComparison.OrdinalIgnoreCase);
@@ -279,7 +282,7 @@ public class SandboxedMartenRuleTests : IAsyncLifetime
         {
             await engine.ExecuteAsync("""
                 import * as directory from 'directory';
-                export const names = directory.Find(u => u.PasswordHash === 'top-secret').map(m => m.Name);
+                export const names = (await directory.Find(u => u.PasswordHash === 'top-secret')).map(m => m.Name);
                 """);
 
             // The rule could not *read* the value, but it could filter on it.

@@ -61,11 +61,11 @@ internal static class SandboxStore
         }
     }
 
-    public static void PrintResults(IQueryable<User> query)
+    public static async Task PrintResults(IQueryable<User> query)
     {
         try
         {
-            var results = query.ToList();
+            var results = await query.ToListAsync();
             Console.WriteLine($"Results: {results.Count} row(s)");
             foreach (var u in results)
                 Console.WriteLine($"  - {u.Name} (active={u.IsActive}, age={u.Age})");

@@ -90,11 +90,11 @@ internal static class OptionalChainingScenario
         Console.WriteLine("Seeded 8 authors + 5 todos.");
     }
 
-    public static void Run(IDocumentSession session)
+    public static async Task Run(IDocumentSession session)
     {
-        RunAuthorsPattern(session);
+        await RunAuthorsPattern(session);
         Console.WriteLine();
-        RunTodosPattern(session);
+        await RunTodosPattern(session);
     }
 
     /// <summary>
@@ -102,7 +102,7 @@ internal static class OptionalChainingScenario
     /// optional chain (`p.Person?.Firstname?.startsWith(...)`) combined in a 3-way
     /// OR with logical AND filters — the v3.1.0 shape that crashed Marten.
     /// </summary>
-    private static void RunAuthorsPattern(IDocumentSession session)
+    private static async Task RunAuthorsPattern(IDocumentSession session)
     {
         Console.WriteLine("--- AUTHORS: p.Person?.Firstname?.startsWith('A'|'L'|'P') ---");
 
@@ -145,7 +145,7 @@ internal static class OptionalChainingScenario
                 var query = session.Query<Author>().Where(expr);
                 Console.WriteLine($"    SQL shape : {FirstLine(SafeSql(query))}");
 
-                var results = query.ToList();
+                var results = await query.ToListAsync();
                 var names = string.Join(", ", results.Select(a => a.Person?.Firstname ?? "(null)"));
                 Console.WriteLine($"    Results   : {results.Count} rows → {names}");
             }
@@ -163,7 +163,7 @@ internal static class OptionalChainingScenario
     /// (`t.Customer?.Id`), compared with a typed Guid literal via `linq.guid(...)`,
     /// OR-chained across a whitelist of IDs. Also in the demo-seed rollback.
     /// </summary>
-    private static void RunTodosPattern(IDocumentSession session)
+    private static async Task RunTodosPattern(IDocumentSession session)
     {
         Console.WriteLine("--- TODOS: t.Customer?.Id in (ACME|Alpine|Central) ---");
 
@@ -194,7 +194,7 @@ internal static class OptionalChainingScenario
                 var query = session.Query<Todo>().Where(expr);
                 Console.WriteLine($"    SQL shape : {FirstLine(SafeSql(query))}");
 
-                var results = query.ToList();
+                var results = await query.ToListAsync();
                 var titles = string.Join(", ", results.Select(t => t.Title));
                 Console.WriteLine($"    Results   : {results.Count} rows → {titles}");
             }

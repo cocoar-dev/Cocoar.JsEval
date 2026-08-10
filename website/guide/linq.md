@@ -177,6 +177,24 @@ users.any(u => u.Age > 100)           // -> EXISTS query
 Everything here is pure JS semantics. TypeScript is optional — it gives you IntelliSense at dev-time (via `.d.ts`), but the translator sees only JS. Scripts authored in plain `.js` work identically.
 :::
 
+::: warning `count`, `find` and `any` need a provider that allows synchronous execution
+`where`, `orderBy` and `thenBy` are lazy — they only build the query, and the host materialises it on the C# side, asynchronously if it wants to.
+
+`count`, `find` and `any` are **terminal**: they execute the query then and there, and they do so synchronously, because a JavaScript expression has to return a value. Providers that permit synchronous execution (EF Core, LINQ2DB, in-memory `IQueryable`) are unaffected.
+
+**Marten 9 is not one of them.** It permits asynchronous data access only, so these three throw `NotSupportedException: As of Marten 9.0, only asynchronous data access is supported`. Marten 8 is unaffected. Until an async-capable equivalent exists, build the query in JS and terminate it in C#:
+
+```js
+// instead of: users.count(u => u.IsActive)
+export const query = users.where(u => u.IsActive);
+```
+```csharp
+var count = await engine.GetValue<IQueryable<User>>("query")!.CountAsync();
+```
+
+`src/Experiments/JsEval.Marten.Sandbox` prints this case as `UNSUPPORTED` rather than hiding it.
+:::
+
 ## How it works
 
 ```mermaid

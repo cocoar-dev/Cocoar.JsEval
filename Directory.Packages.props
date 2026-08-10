@@ -11,9 +11,9 @@
     <PackageVersion Include="coverlet.collector" Version="10.0.0" />
     <PackageVersion Include="DynamicExpresso.Core" Version="2.19.3" />
     <PackageVersion Include="Jint" Version="4.15.3" />
-    <!-- 8.37.0 patches GHSA-vmw2-qwm8-x84c. Staying on 8.x deliberately: Marten 9
-         allows async data access only, which the synchronous module bridge cannot use. -->
-    <PackageVersion Include="Marten" Version="8.37.4" />
+    <!-- Marten 9 permits asynchronous data access only; anything that materialises
+         a query synchronously throws NotSupportedException. -->
+    <PackageVersion Include="Marten" Version="9.11.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
     <PackageVersion Include="linq2db" Version="6.2.1" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />

@@ -17,7 +17,7 @@ Console.WriteLine();
 var store = SandboxStore.Create();
 await SandboxStore.Seed(store);
 
-await Run("1. JS -> Expression -> Marten: SQL byte-identical to C# source lambda", session =>
+await Run("1. JS -> Expression -> Marten: SQL byte-identical to C# source lambda", async session =>
 {
     // Baseline: hand-written C# — what Marten SHOULD produce.
     Expression<Func<User, bool>> csBaseline = u => u.Name.StartsWith("A") && u.IsActive;
@@ -38,22 +38,35 @@ await Run("1. JS -> Expression -> Marten: SQL byte-identical to C# source lambda
 
         var actual = filtered.ToCommand().CommandText;
         Console.WriteLine($"SQL:\n  {actual}");
-        var rows = filtered.ToList();
+        var rows = await filtered.ToListAsync();
         Console.WriteLine($"Rows: {rows.Count} -> {string.Join(", ", rows.Select(u => u.Name))}");
         Console.WriteLine();
         Console.WriteLine(baselineSql == actual
             ? ">>> BYTE-IDENTICAL TO C# BASELINE."
             : $">>> DIFFERS!\nBaseline: {baselineSql}\nActual:   {actual}");
 
-        var count = engine.Evaluate("users.count(u => u.IsActive)").AsNumber();
-        Console.WriteLine($"\nusers.count(u => u.IsActive) -> {count}");
-
-        var bob = (User?)engine.Evaluate("users.find(u => u.Name === 'Bob')").ToObject();
-        Console.WriteLine($"users.find(u => u.Name === 'Bob') -> {bob?.Name} (age={bob?.Age})");
+        // count() / find() / any() are terminal: JsLinqExtensions materialises
+        // them synchronously, which Marten 9 refuses outright. Shown rather than
+        // hidden, because the limitation is the library's, not this demo's.
+        foreach (var (label, js) in new[]
+                 {
+                     ("users.count(u => u.IsActive)", "users.count(u => u.IsActive)"),
+                     ("users.find(u => u.Name === 'Bob')", "users.find(u => u.Name === 'Bob')"),
+                 })
+        {
+            try
+            {
+                Console.WriteLine($"\n{label} -> {engine.Evaluate(js).ToObject()}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\n{label} -> UNSUPPORTED: {ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
+            }
+        }
     }
 });
 
-await Run("2. CsDateTime fluent API in predicate: cutoff.AddDays(-7) from JS", session =>
+await Run("2. CsDateTime fluent API in predicate: cutoff.AddDays(-7) from JS", async session =>
 {
     var cutoffValue = DateTime.UtcNow;
 
@@ -77,7 +90,7 @@ await Run("2. CsDateTime fluent API in predicate: cutoff.AddDays(-7) from JS", s
         var actual = filtered.ToCommand().CommandText;
 
         Console.WriteLine($"SQL:\n  {actual}");
-        var rows = filtered.ToList();
+        var rows = await filtered.ToListAsync();
         Console.WriteLine($"Rows: {rows.Count} -> {string.Join(", ", rows.Select(u => u.Name))}");
         Console.WriteLine();
         Console.WriteLine(baseline == actual
@@ -86,7 +99,7 @@ await Run("2. CsDateTime fluent API in predicate: cutoff.AddDays(-7) from JS", s
     }
 });
 
-await Run("3. OrderBy / ThenByDescending from JS: byte-identical SQL", session =>
+await Run("3. OrderBy / ThenByDescending from JS: byte-identical SQL", async session =>
 {
     Expression<Func<User, bool>> csPred = u => u.IsActive;
     var baseline = session.Query<User>()
@@ -112,7 +125,7 @@ await Run("3. OrderBy / ThenByDescending from JS: byte-identical SQL", session =
         var ordered = (IQueryable<User>)result.ToObject()!;
         var actual = ordered.ToCommand().CommandText;
         Console.WriteLine($"SQL:\n  {actual}");
-        var rows = ordered.ToList();
+        var rows = await ordered.ToListAsync();
         Console.WriteLine($"Rows: {rows.Count} -> {string.Join(", ", rows.Select(u => $"{u.Name}({u.Age})"))}");
         Console.WriteLine();
         Console.WriteLine(baseline == actual
@@ -121,7 +134,7 @@ await Run("3. OrderBy / ThenByDescending from JS: byte-identical SQL", session =
     }
 });
 
-await Run("4. Method matrix — which string/collection methods does Marten translate?", session =>
+await Run("4. Method matrix — which string/collection methods does Marten translate?", async session =>
 {
     var tests = new (string Name, Expression<Func<User, bool>> Expr)[]
     {
@@ -140,7 +153,7 @@ await Run("4. Method matrix — which string/collection methods does Marten tran
     {
         try
         {
-            var _ = session.Query<User>().Where(expr).ToList();
+            var _ = await session.Query<User>().Where(expr).ToListAsync();
             Console.WriteLine($"  {name,-22} ✓");
         }
         catch (Exception ex)
@@ -150,7 +163,7 @@ await Run("4. Method matrix — which string/collection methods does Marten tran
     }
 });
 
-await Run("5. Dependency tracking: which properties does the script touch?", session =>
+await Run("5. Dependency tracking: which properties does the script touch?", async session =>
 {
     var engine = new Engine(opts =>
     {
@@ -189,7 +202,7 @@ await Run("7. Discriminator mapping: Type.Is / Type.IsOneOf + AND-narrowing", Di
 Console.WriteLine();
 Console.WriteLine("=== DONE ===");
 
-async Task Run(string title, Action<IDocumentSession> action)
+async Task Run(string title, Func<IDocumentSession, Task> action)
 {
     Console.WriteLine(new string('=', 70));
     Console.WriteLine($"SCENARIO: {title}");
@@ -197,7 +210,7 @@ async Task Run(string title, Action<IDocumentSession> action)
     try
     {
         await using var session = store.LightweightSession();
-        action(session);
+        await action(session);
     }
     catch (Exception ex)
     {
