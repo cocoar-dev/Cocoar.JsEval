@@ -17,7 +17,9 @@ services.AddJsEval(b => b
 capability grant, in either order. `AllowOnly` declares the reachable members —
 everything else stops existing for the script. `DenyTypes` refuses types by
 declared *and* runtime type. `ConfigureJint` reaches Jint options that only apply
-at construction time, which `RegisterEngineConfigurator` cannot. See the
+at construction time, which `RegisterEngineConfigurator` cannot. Its callback
+runs once per engine, on that engine's own `Options`, so it must only configure
+the instance it is given. See the
 [JsEngine guide](/guide/engine#restricting-what-a-script-can-reach).
 
 ### JsEngine

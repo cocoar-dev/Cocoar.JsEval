@@ -91,7 +91,7 @@ var console = {
         _moduleRegistry = moduleRegistry;
         _logger = logger ?? NullLogger<JsEngine>.Instance;
         Options = options;
-        _engine = new Jint.Engine(Options.JintOptions.CancellationToken(_cancellationTokenSource.Token));
+        _engine = new Jint.Engine(Options.CreateJintOptions(_cancellationTokenSource.Token));
         _jsonParser = new JsonParser(_engine);
         _jsonSerializer = new JsonSerializer(_engine);
         Initialize();

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.0.1] — Engines no longer share one Jint configuration
+
+### Fixed
+
+- **Engines built at the same time could break every later engine.** `JsEngineOptions` is a singleton, and every `JsEngine` constructor registered its cancellation token on the one Jint `Options` it held. Engines built in parallel changed Jint's constraint list concurrently, so an engine could fail with `NullReferenceException` in `Jint.Engine.ResetConstraints()`. Once the shared list was corrupted, every engine built afterwards in the process failed the same way. An engine could also pick up another engine's token, so `Stop()` or disposing one engine could cancel another. Each engine now gets its own Jint `Options`, built from the recorded configuration, and the shared instance is never changed.
+- Under Jint 4.8 (JsEval ≤ 4.1), every engine also shared one timeout and one statement-limit instance, so each evaluation reset the limits of every other running evaluation. Jint 4.15.3 already gives each engine its own instances; tests now pin this.
+
+### Changed
+
+- **`ConfigureJint` runs once per engine**, on that engine's fresh `Options`, and possibly on several threads at once. It must only configure the instance it is given. Register a constraint through the factory overload (`o.Constraint(() => new MyConstraint())`) — an instance created outside the callback is shared by every engine.
+
 ## [5.0.0] — Untrusted-script hardening: interop restrictions, Jint 4.15.3
 
 **Breaking.** Passing an object to a script grants more than the object — it grants everything reachable from it. `AllowOnly` and `DenyTypes` make that surface a decision instead of a consequence, and `Sandboxed()` locks the runtime down. All three are opt-in. The upgrade to Jint 4.15.3 changes how a script sees a CLR array, which is the only change that can affect existing scripts.

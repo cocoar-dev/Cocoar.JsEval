@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
+using System.Threading;
 using Jint;
 using Jint.Runtime.Interop;
 using Jint.Runtime.Debugger;
@@ -10,12 +11,36 @@ namespace Cocoar.JsEval.Engine;
 
 public sealed class JsEngineOptions
 {
-    internal Options JintOptions { get; }
+    // The Jint configuration is recorded as steps and replayed onto a fresh
+    // Options for every engine (CreateJintOptions). One shared Options instance
+    // cannot work: this object is a DI singleton, every JsEngine registers its own
+    // cancellation token on the options it is built from, and Jint keeps the
+    // constraint registrations in plain lists — engines built in parallel raced on
+    // them and could end up with a corrupted list or another engine's token.
+    // Copy-on-write, so an engine being built never enumerates a list that a
+    // late configuration call is changing.
+    private Action<Options>[] _jintSetup = [];
+
+    private void AddJintStep(Action<Options> step) => _jintSetup = [.. _jintSetup, step];
+
+    /// <summary>
+    /// Builds the Jint <see cref="Options"/> for one engine: a fresh instance,
+    /// with its own constraints, carrying every configuration call in the order
+    /// it was made, and observing <paramref name="cancellationToken"/>.
+    /// </summary>
+    internal Options CreateJintOptions(CancellationToken cancellationToken)
+    {
+        var options = new Options();
+        foreach (var step in _jintSetup)
+            step(options);
+        return options.CancellationToken(cancellationToken);
+    }
+
     public List<Type> AllowedExtensionMethods { get; } = [];
 
     public JsEngineOptions()
     {
-        JintOptions = new Options()
+        AddJintStep(static o => o
             .CatchClrExceptions()
             .AllowOperatorOverloading()
             // Defense-in-depth defaults (4.0). Stop runaway scripts even when
@@ -23,11 +48,11 @@ public sealed class JsEngineOptions
             // via WithExecutionTimeout / WithMaxStatements; pass
             // Timeout.InfiniteTimeSpan or 0 to disable.
             .TimeoutInterval(TimeSpan.FromSeconds(10))
-            .MaxStatements(5_000_000);
+            .MaxStatements(5_000_000));
 
         // Enable automatic .NET Task/ValueTask → JS Promise conversion.
         // Scripts can `await` .NET async methods directly.
-        JintOptions.ExperimentalFeatures = ExperimentalFeature.TaskInterop;
+        AddJintStep(static o => o.ExperimentalFeatures = ExperimentalFeature.TaskInterop);
 
         // Jint's LiveView array conversion (default since 4.14) is taken
         // deliberately, not by inheritance. Under the previous Copy mode a
@@ -45,7 +70,7 @@ public sealed class JsEngineOptions
     /// </summary>
     public JsEngineOptions WithExecutionTimeout(TimeSpan timeout)
     {
-        JintOptions.TimeoutInterval(timeout);
+        AddJintStep(o => o.TimeoutInterval(timeout));
         return this;
     }
 
@@ -56,7 +81,7 @@ public sealed class JsEngineOptions
     /// </summary>
     public JsEngineOptions WithMaxStatements(int maxStatements)
     {
-        JintOptions.MaxStatements(maxStatements);
+        AddJintStep(o => o.MaxStatements(maxStatements));
         return this;
     }
 
@@ -89,11 +114,19 @@ public sealed class JsEngineOptions
     /// builder does not surface; note that options taking effect at construction
     /// time — the interop <c>TypeResolver</c> among them — cannot be set from
     /// <see cref="RegisterEngineConfigurator"/>, which only sees the finished engine.
+    /// <para>
+    /// <paramref name="configure"/> runs once for every engine, on a fresh
+    /// <see cref="Options"/> of that engine, possibly on several threads at once.
+    /// It must therefore only configure the instance it is given. Register
+    /// constraints through the factory overload, <c>o.Constraint(() =&gt; new MyConstraint())</c>:
+    /// a constraint instance created outside the callback would be shared — and
+    /// its per-execution state reset — by every engine.
+    /// </para>
     /// </summary>
     public JsEngineOptions ConfigureJint(Action<Options> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        configure(JintOptions);
+        AddJintStep(configure);
         return this;
     }
 
@@ -157,7 +190,9 @@ public sealed class JsEngineOptions
         var allowlist = _allowlist;
         var denied = _deniedTypes;
 
-        JintOptions.Interop.TypeResolver = new TypeResolver
+        // One resolver for all engines, as Jint's own default resolver is: it
+        // caches member lookups and is safe to share.
+        var typeResolver = new TypeResolver
         {
             MemberFilter = member =>
             {
@@ -171,14 +206,16 @@ public sealed class JsEngineOptions
                     || (member.DeclaringType is not null && allowlist.Types.Contains(member.DeclaringType));
             }
         };
+        AddJintStep(o => o.Interop.TypeResolver = typeResolver);
 
         if (denied.Count > 0)
         {
-            JintOptions.Interop.WrapObjectHandler = (engine, target, type) =>
+            Options.WrapObjectDelegate wrap = (engine, target, type) =>
                 target is not null && denied.Exists(d => d.IsInstanceOfType(target))
                     ? throw new InvalidOperationException(
                         $"Type '{target.GetType().FullName}' is denied and cannot be exposed to script.")
                     : ObjectWrapper.Create(engine, target!);
+            AddJintStep(o => o.Interop.WrapObjectHandler = wrap);
         }
     }
 
@@ -225,25 +262,28 @@ public sealed class JsEngineOptions
 
         _sandboxed = true;
 
-        JintOptions
-            .Strict()
-            .DisableStringCompilation()
-            .Culture(CultureInfo.InvariantCulture)
-            .LocalTimeZone(TimeZoneInfo.Utc)
-            .TimeoutInterval(TimeSpan.FromSeconds(2))
-            .MaxStatements(1_000_000)
-            .LimitMemory(16 * 1024 * 1024)
-            .LimitRecursion(64);
+        var maxJsonDepth = MaxJsonDepth;
+        AddJintStep(o =>
+        {
+            o.Strict()
+                .DisableStringCompilation()
+                .Culture(CultureInfo.InvariantCulture)
+                .LocalTimeZone(TimeZoneInfo.Utc)
+                .TimeoutInterval(TimeSpan.FromSeconds(2))
+                .MaxStatements(1_000_000)
+                .LimitMemory(16 * 1024 * 1024)
+                .LimitRecursion(64);
 
-        JintOptions.Constraints.MaxArraySize = 100_000;
-        JintOptions.Constraints.MaxExecutionStackCount = 256;
-        JintOptions.Constraints.RegexTimeout = TimeSpan.FromMilliseconds(500);
-        JintOptions.Constraints.PromiseTimeout = TimeSpan.FromSeconds(2);
-        JintOptions.Json.MaxParseDepth = MaxJsonDepth;
+            o.Constraints.MaxArraySize = 100_000;
+            o.Constraints.MaxExecutionStackCount = 256;
+            o.Constraints.RegexTimeout = TimeSpan.FromMilliseconds(500);
+            o.Constraints.PromiseTimeout = TimeSpan.FromSeconds(2);
+            o.Json.MaxParseDepth = maxJsonDepth;
 
-        JintOptions.Interop.AllowGetType = false;
-        JintOptions.Interop.AllowSystemReflection = false;
-        JintOptions.Interop.AllowedAssemblies.Clear();
+            o.Interop.AllowGetType = false;
+            o.Interop.AllowSystemReflection = false;
+            o.Interop.AllowedAssemblies.Clear();
+        });
 
         RegisterEngineConfigurator(static engine =>
         {
@@ -283,9 +323,9 @@ public sealed class JsEngineOptions
 
     public JsEngineOptions EnableDebugMode()
     {
-        JintOptions
+        AddJintStep(static o => o
             .DebugMode()
-            .DebuggerStatementHandling(DebuggerStatementHandling.Script);
+            .DebuggerStatementHandling(DebuggerStatementHandling.Script));
         return this;
     }
 
@@ -296,8 +336,9 @@ public sealed class JsEngineOptions
 
     public JsEngineOptions AddExtensionMethods(params Type[] types)
     {
-        JintOptions.AddExtensionMethods(types);
-        AllowedExtensionMethods.AddRange(types);
+        Type[] copy = [.. types];
+        AddJintStep(o => o.AddExtensionMethods(copy));
+        AllowedExtensionMethods.AddRange(copy);
         return this;
     }
 
@@ -311,14 +352,16 @@ public sealed class JsEngineOptions
     /// </summary>
     public JsEngineOptions AddRuntimeOnlyExtensionMethods(params Type[] types)
     {
-        JintOptions.AddExtensionMethods(types);
+        Type[] copy = [.. types];
+        AddJintStep(o => o.AddExtensionMethods(copy));
         return this;
     }
 
     public JsEngineOptions AllowAssemblies(params Assembly[] assemblies)
     {
         Widening(nameof(AllowAssemblies));
-        JintOptions.AllowClr(assemblies);
+        Assembly[] copy = [.. assemblies];
+        AddJintStep(o => o.AllowClr(copy));
         return this;
     }
 
